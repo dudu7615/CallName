@@ -64,22 +64,23 @@ def _clean_name(raw: str) -> str:
     return text
 
 
-def _normalise_weight(value: object) -> int:
+def _normalise_weight(value: object) -> int | None:
+    """缺失、非数字或越界都返回 None，由导入弹层的默认权重兜底。"""
     if isinstance(value, bool) or not isinstance(value, (int, str, float)):
-        return MIN_WEIGHT
+        return None
     try:
         weight = int(value)
     except (TypeError, ValueError):
-        return MIN_WEIGHT
-    return weight if MIN_WEIGHT <= weight <= MAX_WEIGHT else MIN_WEIGHT
+        return None
+    return weight if MIN_WEIGHT <= weight <= MAX_WEIGHT else None
 
 
 def _collect(
-    entries: list[tuple[str, int]], fmt: ImportFormat, skipped: int = 0
+    entries: list[tuple[str, int | None]], fmt: ImportFormat, skipped: int = 0
 ) -> ParsedRoster:
     """按名字去重保序（保留首次出现的权重）。"""
     names: list[str] = []
-    weights: list[int] = []
+    weights: list[int | None] = []
     seen: set[str] = set()
     dropped = skipped
     for raw_name, weight in entries:
@@ -111,17 +112,17 @@ def _from_yaml(data: bytes, path: Path) -> ParsedRoster:
     if not isinstance(document, list):
         raise RosterError("PARSE_ERROR", "YAML 必须是名字列表或含 names 的对象")
 
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int | None]] = []
     skipped = 0
     for item in document:
         if isinstance(item, str):
-            entries.append((item, MIN_WEIGHT))
+            entries.append((item, None))
         elif isinstance(item, dict):
             raw_name = item.get("name")
             if not isinstance(raw_name, str):
                 skipped += 1
                 continue
-            entries.append((raw_name, _normalise_weight(item.get("weight", MIN_WEIGHT))))
+            entries.append((raw_name, _normalise_weight(item.get("weight"))))
         else:
             skipped += 1
     return _collect(entries, ImportFormat.YAML, skipped)
@@ -129,20 +130,20 @@ def _from_yaml(data: bytes, path: Path) -> ParsedRoster:
 
 def _from_txt(data: bytes, path: Path) -> ParsedRoster:
     """一行可写多个姓名；只有序号残留（如「1.」）或空 token 会被静默丢弃。"""
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int | None]] = []
     for line in _decode(data, path).splitlines():
         for token in TXT_SEPARATOR_RE.split(line):
             if token.strip().isdigit():
                 continue
             name = _clean_name(token)
             if name:
-                entries.append((name, MIN_WEIGHT))
+                entries.append((name, None))
     return _collect(entries, ImportFormat.TXT)
 
 
 def _from_csv(data: bytes, path: Path) -> ParsedRoster:
     reader = csv.reader(io.StringIO(_decode(data, path)))
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int | None]] = []
     skipped = 0
     weight_column: int | None = None
     for row in reader:
@@ -160,7 +161,7 @@ def _from_csv(data: bytes, path: Path) -> ParsedRoster:
         weight = (
             _normalise_weight(row[weight_column])
             if weight_column is not None and len(row) > weight_column
-            else MIN_WEIGHT
+            else None
         )
         entries.append((row[0], weight))
     return _collect(entries, ImportFormat.CSV, skipped)
@@ -177,17 +178,17 @@ def _from_json(data: bytes, path: Path) -> ParsedRoster:
     if not isinstance(document, list):
         raise RosterError("PARSE_ERROR", "JSON 必须是名字数组或含 names 的对象")
 
-    entries: list[tuple[str, int]] = []
+    entries: list[tuple[str, int | None]] = []
     skipped = 0
     for item in document:
         if isinstance(item, str):
-            entries.append((item, MIN_WEIGHT))
+            entries.append((item, None))
         elif isinstance(item, dict):
             raw_name = item.get("name")
             if not isinstance(raw_name, str):
                 skipped += 1
                 continue
-            entries.append((raw_name, _normalise_weight(item.get("weight", MIN_WEIGHT))))
+            entries.append((raw_name, _normalise_weight(item.get("weight"))))
         else:
             skipped += 1
     return _collect(entries, ImportFormat.JSON, skipped)
@@ -205,7 +206,7 @@ def _from_pkl(data: bytes, path: Path) -> ParsedRoster:
         raise RosterError(
             "BAD_PICKLE", "只支持由本程序生成的 list[str] 名单文件"
         )
-    return _collect([(item, MIN_WEIGHT) for item in loaded], ImportFormat.PKL)
+    return _collect([(item, None) for item in loaded], ImportFormat.PKL)
 
 
 def parse_roster(path: Path) -> ParsedRoster:

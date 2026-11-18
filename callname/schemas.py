@@ -118,7 +118,10 @@ class ParsedRoster(BaseModel):
     """解析后的名单，内部结构，也可直接序列化给前端。"""
 
     names: list[str] = Field(description="去重保序后的名字")
-    weights: list[int] = Field(default_factory=list, description="与 names 对齐的权重")
+    weights: list[int | None] = Field(
+        default_factory=list,
+        description="与 names 对齐的权重；None = 文件未指定，落库时用导入弹层的默认权重",
+    )
     format: ImportFormat = Field(description="来源格式")
     skipped: int = Field(default=0, description="解析时跳过的行数（空行/表头等）")
 
@@ -131,6 +134,9 @@ class ImportPreview(BaseModel):
     count: int = Field(description="文件中的有效名字数")
     file_dups: int = Field(description="文件内部重复被去掉的数量")
     db_dups: int = Field(description="库中已存在同名的数量")
+    unweighted: int = Field(
+        default=0, description="文件未写权重、将使用默认权重的名字数"
+    )
     names: list[str] = Field(default_factory=list, description="待导入的名字（已去重）")
 
 

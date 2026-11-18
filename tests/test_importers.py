@@ -24,14 +24,14 @@ def test_yaml_list_of_strings(tmp_path: Path) -> None:
     parsed = parse_roster(path)
     assert parsed.names == ["张三", "李四"]
     assert parsed.format is ImportFormat.YAML
-    assert parsed.weights == [1, 1]
+    assert parsed.weights == [None, None], "没写权重 = 交给默认权重"
 
 
 def test_yaml_list_of_objects(tmp_path: Path) -> None:
     path = _write(tmp_path, "b.yaml", "- name: 张三\n  weight: 3\n- name: 李四\n")
     parsed = parse_roster(path)
     assert parsed.names == ["张三", "李四"]
-    assert parsed.weights == [3, 1]
+    assert parsed.weights == [3, None]
 
 
 def test_yaml_with_names_key(tmp_path: Path) -> None:
@@ -73,21 +73,31 @@ def test_csv_with_header_and_weight(tmp_path: Path) -> None:
     path = _write(tmp_path, "a.csv", "姓名,权重\n张三,5\n李四,0\n")
     parsed = parse_roster(path)
     assert parsed.names == ["张三", "李四"]
-    assert parsed.weights == [5, 1], "非法权重回退 1"
+    assert parsed.weights == [5, None], "非法权重视为未指定，由默认权重兜底"
 
 
 def test_csv_without_header(tmp_path: Path) -> None:
     path = _write(tmp_path, "b.csv", "张三\n李四\n")
-    assert parse_roster(path).names == ["张三", "李四"]
+    parsed = parse_roster(path)
+    assert parsed.names == ["张三", "李四"]
+    assert parsed.weights == [None, None]
 
 
 def test_json_shapes(tmp_path: Path) -> None:
     strings = _write(tmp_path, "a.json", json.dumps(["张三", "李四"]))
-    objects = _write(tmp_path, "b.json", json.dumps([{"name": "张三", "weight": 4}]))
-    assert parse_roster(strings).names == ["张三", "李四"]
+    objects = _write(tmp_path, "b.json", json.dumps([{"name": "张三", "weight": 4}, {"name": "李四"}]))
+    parsed_strings = parse_roster(strings)
+    assert parsed_strings.names == ["张三", "李四"]
+    assert parsed_strings.weights == [None, None]
     parsed = parse_roster(objects)
-    assert parsed.names == ["张三"]
-    assert parsed.weights == [4]
+    assert parsed.names == ["张三", "李四"]
+    assert parsed.weights == [4, None]
+
+
+def test_txt_weights_unset(tmp_path: Path) -> None:
+    path = _write(tmp_path, "w.txt", "张三 李四\n")
+    parsed = parse_roster(path)
+    assert parsed.weights == [None, None]
 
 
 def test_pkl_list_of_strings(tmp_path: Path) -> None:

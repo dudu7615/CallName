@@ -17,6 +17,15 @@ from callname.schemas import (
 )
 
 
+def _unweighted_count(parsed: ParsedRoster) -> int:
+    """文件里没写权重的名字数（含 weights 比 names 短的情况）。"""
+    count = 0
+    for index in range(len(parsed.names)):
+        if index >= len(parsed.weights) or parsed.weights[index] is None:
+            count += 1
+    return count
+
+
 def _preview(db: Database, parsed: ParsedRoster, source: str) -> ImportPreview:
     existing = db.duplicate_names(parsed.names)
     names = [name for name in parsed.names if name not in existing]
@@ -26,6 +35,7 @@ def _preview(db: Database, parsed: ParsedRoster, source: str) -> ImportPreview:
         count=len(parsed.names),
         file_dups=parsed.skipped,
         db_dups=len(parsed.names) - len(names),
+        unweighted=_unweighted_count(parsed),
         names=names,
     )
 
@@ -37,13 +47,21 @@ def preview_import(db: Database, path: Path) -> ImportPreview:
     return _preview(db, parsed, str(path))
 
 
+def _resolve_weights(parsed: ParsedRoster, weight: int) -> list[int]:
+    """文件未指定权重的条目统一用弹层的默认权重。"""
+    weights: list[int] = []
+    for index in range(len(parsed.names)):
+        explicit = parsed.weights[index] if index < len(parsed.weights) else None
+        weights.append(weight if explicit is None else explicit)
+    return weights
+
+
 def _apply(
     db: Database, parsed: ParsedRoster, mode: ImportMode, weight: int, dedupe: bool
 ) -> ImportResult:
-    weights = parsed.weights if parsed.weights else [weight] * len(parsed.names)
     result = db.import_people(
         names=parsed.names,
-        weights=weights,
+        weights=_resolve_weights(parsed, weight),
         mode=mode,
         weight_default=weight,
         dedupe=dedupe,

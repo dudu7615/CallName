@@ -7,7 +7,7 @@ const api = () => window.pywebview.api;
 
 /** @typedef {{id:number,name:string,weight:number,active:boolean,draw_count:number,sort_order:number,last_drawn_at:string|null}} PersonItem */
 /** @typedef {{total:number,active:number,sum_draws:number,last_draw_at:string|null}} StatsResult */
-/** @typedef {{path:string,format:string,count:number,file_dups:number,db_dups:number,names:string[]}} ImportPreview */
+/** @typedef {{path:string,format:string,count:number,file_dups:number,db_dups:number,unweighted:number,names:string[]}} ImportPreview */
 
 const rowsBody = /** @type {HTMLElement} */ (document.getElementById('rows'));
 const emptyHint = /** @type {HTMLElement} */ (document.getElementById('empty'));
@@ -284,6 +284,7 @@ function openImportModal(preview, key) {
     ['格式', preview.format],
     ['文件内名字', String(preview.count)],
     ['文件内重复', String(preview.file_dups)],
+    ['未写权重', String(preview.unweighted)],
     ['库中已存在', String(preview.db_dups)],
     ['将新增', String(preview.names.length)],
   ];

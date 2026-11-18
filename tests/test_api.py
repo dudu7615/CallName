@@ -98,12 +98,27 @@ def test_manage_import_flow(db: Database, tmp_path: Path) -> None:
     assert preview["ok"] is True
     assert preview["data"]["count"] == 2  # type: ignore[index]
     assert preview["data"]["db_dups"] == 0  # type: ignore[index]
+    assert preview["data"]["unweighted"] == 2  # type: ignore[index]
 
-    committed = _assert_json(api.commit_import(str(path), "merge", 1, True))
+    committed = _assert_json(api.commit_import(str(path), "merge", 3, True))
     assert committed["data"] == {"added": 2, "updated": 0, "skipped": 0}
+    assert {person.weight for person in db.list_people()} == {3}, "txt 未写权重 → 默认权重"
 
     again = _assert_json(api.preview_import(str(path)))
     assert again["data"]["db_dups"] == 2  # type: ignore[index]
+
+
+def test_import_keeps_explicit_weights_and_fills_default(db: Database, tmp_path: Path) -> None:
+    api = ManageApi(db=db)
+    path = tmp_path / "mixed.yml"
+    path.write_text("- name: 张三\n  weight: 5\n- name: 李四\n", encoding="utf-8")
+
+    preview = _assert_json(api.preview_import(str(path)))
+    assert preview["data"]["unweighted"] == 1  # type: ignore[index]
+
+    _assert_json(api.commit_import(str(path), "merge", 2, True))
+    weights = {person.name: person.weight for person in db.list_people()}
+    assert weights == {"张三": 5, "李四": 2}
 
 
 def test_pick_import_file_without_window(db: Database) -> None:
