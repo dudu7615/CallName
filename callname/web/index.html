@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>点名</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="main-page">
+  <div class="stage">
+    <header class="hud">
+      <span id="hud-cycle" class="hud-cycle">第 1 轮</span>
+      <span id="hud-remaining" class="hud-remaining">本轮剩余 0 / 0</span>
+    </header>
+
+    <div class="reel">
+      <div class="clip" id="clip">
+        <div class="band"></div>
+        <div class="strip" id="strip"></div>
+        <div class="fade"></div>
+      </div>
+    </div>
+
+    <footer class="controls">
+      <button id="start" class="btn btn-primary" type="button">开始点名</button>
+      <button id="reset" class="btn btn-ghost" type="button"
+              title="重新开始一轮（不清空累计次数）">重置列表</button>
+      <button id="manage" class="btn btn-icon" type="button" title="名单管理">⚙</button>
+    </footer>
+
+    <p id="toast" class="toast" role="status" aria-live="polite"></p>
+  </div>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
