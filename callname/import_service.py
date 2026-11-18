@@ -10,8 +10,6 @@ from loguru import logger
 from callname.db import Database
 from callname.importers import RosterError, parse_roster
 from callname.schemas import (
-    BuiltinRosterData,
-    ImportFormat,
     ImportMode,
     ImportPreview,
     ImportResult,
@@ -37,19 +35,6 @@ def preview_import(db: Database, path: Path) -> ImportPreview:
     logger.info("preview import {}", path)
     parsed = parse_roster(path)
     return _preview(db, parsed, str(path))
-
-
-def preview_builtin(db: Database, key: str) -> ImportPreview:
-    """内置名单的预览，走与文件导入完全相同的路径。"""
-    from callname.builtin_rosters import get_builtin
-
-    data: BuiltinRosterData = get_builtin(key)
-    parsed = ParsedRoster(
-        names=list(data.names),
-        weights=[1] * len(data.names),
-        format=ImportFormat.TXT,
-    )
-    return _preview(db, parsed, f"builtin:{key}")
 
 
 def _apply(
@@ -85,25 +70,8 @@ def commit_import(
     return _apply(db, parsed, mode, weight, dedupe)
 
 
-def commit_builtin(
-    db: Database, key: str, mode: ImportMode, weight: int = 1, dedupe: bool = True
-) -> ImportResult:
-    """把内置名单写进数据库。"""
-    from callname.builtin_rosters import get_builtin
-
-    data = get_builtin(key)
-    parsed = ParsedRoster(
-        names=list(data.names),
-        weights=[1] * len(data.names),
-        format=ImportFormat.TXT,
-    )
-    return _apply(db, parsed, mode, weight, dedupe)
-
-
 __all__ = [
     "RosterError",
-    "commit_builtin",
     "commit_import",
-    "preview_builtin",
     "preview_import",
 ]

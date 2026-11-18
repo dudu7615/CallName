@@ -1,4 +1,4 @@
-"""名单解析与内置名单测试。"""
+"""名单解析测试。"""
 
 import json
 import pickle
@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from callname.builtin_rosters import BUILTIN_ROSTERS, get_builtin, list_builtin
 from callname.importers import RosterError, parse_roster
 from callname.schemas import ImportFormat
 
@@ -115,21 +114,3 @@ def test_missing_file(tmp_path: Path) -> None:
     with pytest.raises(RosterError) as info:
         parse_roster(tmp_path / "nope.txt")
     assert info.value.code == "NO_FILE"
-
-
-def test_builtin_roster_counts() -> None:
-    counts = {key: len(names) for key, names in BUILTIN_ROSTERS.items()}
-    assert counts == {"2": 52, "93": 51, "94": 52, "96": 51}
-    union = {name for names in BUILTIN_ROSTERS.values() for name in names}
-    assert len(union) == 205
-
-
-def test_builtin_helpers() -> None:
-    listed = list_builtin()
-    assert [item.key for item in listed] == ["2", "93", "94", "96"]
-    assert listed[0].label == "2 班（52 人）"
-    data = get_builtin("93")
-    assert len(data.names) == 51
-    with pytest.raises(RosterError) as info:
-        get_builtin("nope")
-    assert info.value.code == "BAD_KEY"

@@ -56,7 +56,6 @@
 }
 .input:focus { border-color: var(--band-line); }
 .input-weight { width: 72px; }
-.select { padding: 8px 10px; }
 
 .weight-field {
   display: inline-flex;

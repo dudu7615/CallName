@@ -180,16 +180,3 @@ class ClearCountsResult(BaseModel):
     people: int = Field(description="被清零的人数")
 
 
-class BuiltinRoster(BaseModel):
-    """内置名单的元信息。"""
-
-    key: str = Field(description="稳定键，如 2 / 93 / 94 / 96")
-    label: str = Field(description="下拉框展示文案")
-    count: int = Field(description="名单人数")
-
-
-class BuiltinRosterData(BaseModel):
-    """内置名单内容。"""
-
-    key: str = Field(description="稳定键")
-    names: list[str] = Field(description="名单中的名字")

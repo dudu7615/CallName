@@ -19,8 +19,6 @@ from callname.schemas import (
     DeleteOneResult,
     FilePickResult,
     LaunchResult,
-    BuiltinRoster,
-    BuiltinRosterData,
     ClearCountsResult,
     DeleteManyResult,
     DrawResult,
@@ -171,11 +169,6 @@ class ManageApi:
             "preview_import", lambda: preview_import(self._db, Path(path))
         )
 
-    def preview_builtin(self, key: str) -> dict[str, object]:
-        from callname.import_service import preview_builtin
-
-        return self._call("preview_builtin", lambda: preview_builtin(self._db, key))
-
     def commit_import(
         self,
         path: str,
@@ -192,23 +185,6 @@ class ManageApi:
                 self._db, Path(path), _import_mode(mode), weight, dedupe
             ),
         )
-
-    def commit_builtin(
-        self, key: str, mode: str, weight: int = 1, dedupe: bool = True
-    ) -> dict[str, object]:
-        from callname.import_service import commit_builtin
-
-        return self._call(
-            "commit_builtin",
-            lambda: commit_builtin(
-                self._db, key, _import_mode(mode), weight, dedupe
-            ),
-        )
-
-    def builtin_rosters(self) -> dict[str, object]:
-        from callname.builtin_rosters import list_builtin
-
-        return self._call("builtin_rosters", list_builtin)
 
     # -- 内部 -------------------------------------------------------------
     def _call[T](self, name: str, action: Callable[[], T]) -> dict[str, object]:

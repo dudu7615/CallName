@@ -37,8 +37,6 @@ uv run main.py --manage   # 名单管理窗口（也可以点主窗口右下角 
 
 管理窗口 →「导入文件…」，支持 `.yml` / `.yaml` / `.txt` / `.csv` / `.json` / `.pkl`。
 
-也可以「快速导入」内置的 4 份旧班级名单（2 / 93 / 94 / 96，共 205 个名字）。
-
 > `.pkl` 导入会执行文件中的代码，只导入自己生成的文件。
 
 ## 开发
@@ -66,7 +64,6 @@ uv run main.py --auto 3                       # 自测：自动连抽 3 次
 | `callname/draw.py` | 本轮会话与加权抽样 |
 | `callname/importers.py` | 名单解析（yml/txt/csv/json/pkl） |
 | `callname/import_service.py` | 导入预览与落库编排 |
-| `callname/builtin_rosters.py` | 内嵌的 4 份旧班级名单 |
 | `callname/api.py` | pywebview 的 js_api 桥 |
 | `callname/app.py` | 启动参数与窗口 |
 | `callname/web/` | 前端（原生 HTML/CSS/JS，无构建步骤） |

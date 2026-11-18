@@ -9,11 +9,6 @@ from callname.db import Database
 from callname.draw import DrawSession
 
 
-def _as_list(value: object) -> list[dict[str, object]]:
-    assert isinstance(value, list)
-    return [entry for entry in value if isinstance(entry, dict)]
-
-
 def _assert_json(payload: object) -> dict[str, object]:
     dumped = json.dumps(payload, ensure_ascii=False)
     loaded = json.loads(dumped)
@@ -109,23 +104,6 @@ def test_manage_import_flow(db: Database, tmp_path: Path) -> None:
 
     again = _assert_json(api.preview_import(str(path)))
     assert again["data"]["db_dups"] == 2  # type: ignore[index]
-
-
-def test_manage_builtin_import(db: Database) -> None:
-    api = ManageApi(db=db)
-    listed = _assert_json(api.builtin_rosters())
-    keys = [entry["key"] for entry in _as_list(listed["data"])]
-    assert keys == ["2", "93", "94", "96"]
-
-    preview = _assert_json(api.preview_builtin("2"))
-    assert preview["data"]["count"] == 52  # type: ignore[index]
-
-    committed = _assert_json(api.commit_builtin("2", "merge", 1, True))
-    assert committed["data"]["added"] == 52  # type: ignore[index]
-
-    rejected = _assert_json(api.preview_builtin("nope"))
-    assert rejected["ok"] is False
-    assert rejected["error"]["code"] == "BAD_KEY"  # type: ignore[index]
 
 
 def test_pick_import_file_without_window(db: Database) -> None:

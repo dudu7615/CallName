@@ -17,7 +17,6 @@ const newNameEl = /** @type {HTMLInputElement} */ (document.getElementById('new-
 const newWeightEl = /** @type {HTMLInputElement} */ (document.getElementById('new-weight'));
 const addBtn = /** @type {HTMLButtonElement} */ (document.getElementById('add'));
 const importBtn = /** @type {HTMLButtonElement} */ (document.getElementById('import'));
-const builtinEl = /** @type {HTMLSelectElement} */ (document.getElementById('builtin'));
 const deleteSelectedBtn = /** @type {HTMLButtonElement} */ (document.getElementById('delete-selected'));
 const clearCountsBtn = /** @type {HTMLButtonElement} */ (document.getElementById('clear-counts'));
 const checkAll = /** @type {HTMLInputElement} */ (document.getElementById('check-all'));
@@ -160,22 +159,13 @@ function renderRows(people) {
 
 async function loadAll() {
   const query = searchEl.value.trim();
-  const [people, stats, builtins] = await Promise.all([
+  const [people, stats] = await Promise.all([
     unwrap(api().list_people(query)),
     unwrap(api().stats()),
-    unwrap(api().builtin_rosters()),
   ]);
   renderRows(people);
   statsEl.dataset.base = `总人数 ${stats.total} · 启用 ${stats.active} · 累计抽中 ${stats.sum_draws}`;
   statsEl.textContent = statsEl.dataset.base;
-  if (builtinEl.options.length <= 1) {
-    for (const item of builtins) {
-      const option = document.createElement('option');
-      option.value = item.key;
-      option.textContent = item.label;
-      builtinEl.appendChild(option);
-    }
-  }
 }
 
 async function updatePerson(id, patch) {
@@ -281,20 +271,16 @@ function askConfirm(title, text) {
   });
 }
 
-/** @type {{ source: 'file'|'builtin', key: string, preview: ImportPreview } | null} */
+/** @type {{ key: string, preview: ImportPreview } | null} */
 let pendingImport = null;
 
-function ingestLabel(preview) {
-  return preview.path.startsWith('builtin:') ? '内置名单' : preview.path;
-}
-
-function openImportModal(preview, source, key) {
-  pendingImport = { source, key, preview };
+function openImportModal(preview, key) {
+  pendingImport = { key, preview };
   document.getElementById('import-title').textContent = '导入预览';
   const facts = document.getElementById('import-facts');
   facts.replaceChildren();
   const entries = [
-    ['来源', ingestLabel(preview)],
+    ['来源', preview.path],
     ['格式', preview.format],
     ['文件内名字', String(preview.count)],
     ['文件内重复', String(preview.file_dups)],
@@ -323,22 +309,9 @@ async function pickImport() {
     const path = await unwrap(api().pick_import_file());
     if (!path) return;
     const preview = await unwrap(api().preview_import(path));
-    openImportModal(preview, 'file', path);
+    openImportModal(preview, path);
   } catch (error) {
     toast(`读取文件失败：${error instanceof Error ? error.message : String(error)}`);
-  }
-}
-
-async function pickBuiltin() {
-  const key = builtinEl.value;
-  if (!key) return;
-  try {
-    const preview = await unwrap(api().preview_builtin(key));
-    openImportModal(preview, 'builtin', key);
-  } catch (error) {
-    toast(`读取内置名单失败：${error instanceof Error ? error.message : String(error)}`);
-  } finally {
-    builtinEl.value = '';
   }
 }
 
@@ -350,11 +323,9 @@ async function commitImport() {
     /** @type {HTMLInputElement} */ (document.getElementById('import-weight')).value,
     10,
   ) || 1;
-  const { source, key } = pendingImport;
+  const { key } = pendingImport;
   try {
-    const result = source === 'file'
-      ? await unwrap(api().commit_import(key, mode, weight, dedupe))
-      : await unwrap(api().commit_builtin(key, mode, weight, dedupe));
+    const result = await unwrap(api().commit_import(key, mode, weight, dedupe));
     importModal.hidden = true;
     pendingImport = null;
     toast(`导入完成：新增 ${result.added}，更新 ${result.updated}，跳过 ${result.skipped}`);
@@ -371,7 +342,6 @@ function bind() {
     if (event.key === 'Enter') { event.preventDefault(); void addPerson(); }
   });
   importBtn.addEventListener('click', () => { void pickImport(); });
-  builtinEl.addEventListener('change', () => { void pickBuiltin(); });
   deleteSelectedBtn.addEventListener('click', () => { void deleteSelected(); });
   clearCountsBtn.addEventListener('click', () => { void clearCounts(); });
   checkAll.addEventListener('change', () => {
