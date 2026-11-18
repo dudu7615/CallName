@@ -52,6 +52,23 @@ def test_txt_gb18030(tmp_path: Path) -> None:
     assert parse_roster(path).names == ["王五", "赵六"]
 
 
+def test_txt_space_and_comma_separators(tmp_path: Path) -> None:
+    path = _write(tmp_path, "sep.txt", "张三 李四\n王五,赵六，孙七、周八\t吴九")
+    assert parse_roster(path).names == ["张三", "李四", "王五", "赵六", "孙七", "周八", "吴九"]
+
+
+def test_txt_fullwidth_space(tmp_path: Path) -> None:
+    path = _write(tmp_path, "full.txt", "张三　李四")
+    assert parse_roster(path).names == ["张三", "李四"]
+
+
+def test_txt_numbered_tokens_are_dropped(tmp_path: Path) -> None:
+    path = _write(tmp_path, "num.txt", "1. 张三 2. 李四\n3 王五")
+    parsed = parse_roster(path)
+    assert parsed.names == ["张三", "李四", "王五"]
+    assert parsed.skipped == 0, "序号残留不应算作文件内重复"
+
+
 def test_csv_with_header_and_weight(tmp_path: Path) -> None:
     path = _write(tmp_path, "a.csv", "姓名,权重\n张三,5\n李四,0\n")
     parsed = parse_roster(path)

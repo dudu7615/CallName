@@ -2,12 +2,15 @@
 
 解析只负责「文件 -> 名字列表」，不碰数据库；去重预览与落库在
 import_service.py，数据库现状由 Database 提供。
+
+txt 一行可写多个姓名：空白（含全角空格）、中英文逗号、顿号都算分隔符。
 """
 
 import csv
 import io
 import json
 import pickle
+import re
 from pathlib import Path
 
 import yaml
@@ -20,6 +23,7 @@ CSV_HEADERS = {"姓名", "名字", "name", "学生", "学生姓名", "学生名�
 WEIGHT_HEADERS = {"weight", "权重"}
 MIN_WEIGHT = 1
 MAX_WEIGHT = 99
+TXT_SEPARATOR_RE = re.compile(r"[\s,，、]+")
 
 
 class RosterError(Exception):
@@ -124,7 +128,15 @@ def _from_yaml(data: bytes, path: Path) -> ParsedRoster:
 
 
 def _from_txt(data: bytes, path: Path) -> ParsedRoster:
-    entries = [(line, MIN_WEIGHT) for line in _decode(data, path).splitlines()]
+    """一行可写多个姓名；只有序号残留（如「1.」）或空 token 会被静默丢弃。"""
+    entries: list[tuple[str, int]] = []
+    for line in _decode(data, path).splitlines():
+        for token in TXT_SEPARATOR_RE.split(line):
+            if token.strip().isdigit():
+                continue
+            name = _clean_name(token)
+            if name:
+                entries.append((name, MIN_WEIGHT))
     return _collect(entries, ImportFormat.TXT)
 
 
