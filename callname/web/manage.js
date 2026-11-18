@@ -8,6 +8,7 @@ const api = () => window.pywebview.api;
 /** @typedef {{id:number,name:string,weight:number,active:boolean,draw_count:number,sort_order:number,last_drawn_at:string|null}} PersonItem */
 /** @typedef {{total:number,active:number,sum_draws:number,last_draw_at:string|null}} StatsResult */
 /** @typedef {{path:string,format:string,count:number,file_dups:number,db_dups:number,unweighted:number,names:string[]}} ImportPreview */
+/** @typedef {{path:string|null}} FilePickResult */
 
 const rowsBody = /** @type {HTMLElement} */ (document.getElementById('rows'));
 const emptyHint = /** @type {HTMLElement} */ (document.getElementById('empty'));
@@ -307,8 +308,10 @@ function openImportModal(preview, key) {
 
 async function pickImport() {
   try {
-    const path = await unwrap(api().pick_import_file());
-    if (!path) return;
+    /** @type {FilePickResult} */
+    const picked = await unwrap(api().pick_import_file());
+    if (!picked.path) return;
+    const path = picked.path;
     const preview = await unwrap(api().preview_import(path));
     openImportModal(preview, path);
   } catch (error) {
