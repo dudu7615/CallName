@@ -1,0 +1,44 @@
+[project]
+name = "callname"
+version = "2.0.0"
+description = "随机点名工具（Web UI + SQLite）"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "loguru>=0.7",
+    "pydantic>=2.14",
+    "pyside6>=6.8 ; sys_platform == 'linux'",
+    "pywebview>=6.2,<7",
+    "pyyaml>=6.0.3",
+    "qtpy>=2.4 ; sys_platform == 'linux'",
+    "sqlmodel>=0.0.50",
+]
+
+[project.scripts]
+callname = "callname.app:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.13",
+    "pytest>=8",
+]
+
+[[tool.uv.index]]
+url = "https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple"
+default = true
+
+[tool.mypy]
+strict = true
+mypy_path = "."
+explicit_package_bases = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+warn_return_any = true
+
+[[tool.mypy.overrides]]
+module = ["webview.*", "qtpy.*", "yaml.*", "bottle.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
