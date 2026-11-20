@@ -32,13 +32,17 @@ const resetBtn = /** @type {HTMLButtonElement} */ (document.getElementById('rese
 const manageBtn = /** @type {HTMLButtonElement} */ (document.getElementById('manage'));
 const hudCycle = /** @type {HTMLElement} */ (document.getElementById('hud-cycle'));
 const hudRemaining = /** @type {HTMLElement} */ (document.getElementById('hud-remaining'));
+const hudDrawn = /** @type {HTMLElement} */ (document.getElementById('hud-drawn'));
+const hudFill = /** @type {HTMLElement} */ (document.getElementById('hud-fill'));
+const hudTrack = /** @type {HTMLElement} */ (document.getElementById('hud-track'));
 const toast = /** @type {HTMLElement} */ (document.getElementById('toast'));
 
 let toastTimer = 0;
 
-/** @param {string} message @param {number} [ms] */
-function showToast(message, ms = 2600) {
+/** @param {string} message @param {number} [ms] @param {boolean} [isError] */
+function showToast(message, ms = 2600, isError = false) {
   toast.textContent = message;
+  toast.classList.toggle('is-error', isError);
   toast.classList.add('show');
   window.clearTimeout(toastTimer);
   toastTimer = window.setTimeout(() => toast.classList.remove('show'), ms);
@@ -67,13 +71,18 @@ async function unwrap(promise) {
  */
 function renderStatus(status) {
   state.status = status;
-  hudCycle.textContent = `第 ${status.cycle} 轮`;
-  hudRemaining.textContent = `本轮剩余 ${status.remaining} / ${status.active}`;
+  hudCycle.textContent = String(status.cycle);
+  hudRemaining.textContent = String(status.remaining);
+  hudDrawn.textContent = `${status.drawn} / ${status.active}`;
+  const ratio = status.active > 0 ? status.drawn / status.active : 0;
+  hudFill.style.width = `${Math.round(ratio * 100)}%`;
+  hudTrack.setAttribute('aria-valuemax', String(status.active));
+  hudTrack.setAttribute('aria-valuenow', String(status.drawn));
   const empty = status.active === 0;
   startBtn.disabled = empty || state.busy;
   resetBtn.disabled = empty || state.busy;
   if (empty) {
-    showToast('名单为空，点击右下角 ⚙ 添加名字', 4000);
+    showToast('名单为空，点击右侧齿轮添加名字', 4000);
   }
 }
 
@@ -117,9 +126,9 @@ async function doDraw() {
   } catch (error) {
     state.busy = false;
     if (error instanceof ApiFailure && error.code === 'EMPTY_ROSTER') {
-      showToast(error.message, 4000);
+      showToast(error.message, 4000, true);
     } else {
-      showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000);
+      showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000, true);
     }
     await refreshStatus({ force: true }).catch(() => {});
   }
@@ -140,7 +149,7 @@ async function doReset() {
     showToast('已重新开始一轮（累计次数保持不变）');
   } catch (error) {
     state.busy = false;
-    showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000);
+    showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000, true);
     await refreshStatus({ force: true }).catch(() => {});
   }
 }
@@ -149,7 +158,7 @@ async function doOpenManage() {
   try {
     await unwrap(window.pywebview.api.open_manage());
   } catch (error) {
-    showToast(`无法打开名单管理：${error instanceof Error ? error.message : String(error)}`, 4000);
+    showToast(`无法打开名单管理：${error instanceof Error ? error.message : String(error)}`, 4000, true);
   }
 }
 
@@ -174,7 +183,7 @@ async function boot() {
   try {
     await refreshStatus({ force: true });
   } catch (error) {
-    showToast(`初始化失败：${error instanceof Error ? error.message : String(error)}`, 4000);
+    showToast(`初始化失败：${error instanceof Error ? error.message : String(error)}`, 4000, true);
   }
 }
 
