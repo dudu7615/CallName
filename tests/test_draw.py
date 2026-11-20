@@ -7,6 +7,7 @@ from collections import Counter
 from callname.db import Database
 from callname.draw import DrawSession
 from callname.models import Person
+from callname.schemas import ImportMode
 
 
 def _draw_once(session: DrawSession) -> str:
@@ -169,3 +170,36 @@ def test_result_is_json_serialisable(seeded: Database) -> None:
     assert '"ok": true' in dumped or '"ok":true' in dumped
     status = session.status().model_dump(mode="json")
     json.dumps(status, ensure_ascii=False)
+
+
+def test_replace_roster_mid_round_recycles_reused_ids(db: Database) -> None:
+    """管理窗口「替换全部名单」后，SQLite 复用 rowid 不能让新人被整轮跳过。"""
+    for name in "ABCDE":
+        db.add_person(name, 1)
+    session = DrawSession(db, rng=random.Random(23))
+    for _ in range(2):
+        _draw_once(session)
+
+    # 替换后新人的 id 恰好落在旧 id 1..5 上，正是会撞上 _drawn 的情形
+    db.import_people(list("VWXYZ"), [1] * 5, ImportMode.REPLACE, 1, True)
+    assert [item.name for item in db.list_people()][:5] == list("VWXYZ")
+
+    names = [_draw_once(session) for _ in range(5)]
+    assert sorted(names) == list("VWXYZ"), "替换名单后新一轮里每人都该被点到一次"
+
+
+def test_deleting_drawn_person_keeps_remaining_consistent(db: Database) -> None:
+    """删掉本轮已抽中的人后，remaining 不能算成负数或和 status() 打架。"""
+    for name in "ABC":
+        db.add_person(name, 1)
+    session = DrawSession(db, rng=random.Random(31))
+    first = session.draw()
+    assert first.ok and first.data is not None
+    assert db.delete_person(first.data.id) is True
+
+    for _ in range(2):
+        response = session.draw()
+        assert response.ok and response.data is not None
+        status = session.status()
+        assert response.data.remaining == status.remaining, "两处 remaining 必须一致"
+        assert response.data.remaining >= 0, "删人后 remaining 不能为负"
