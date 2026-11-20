@@ -5,7 +5,7 @@
  *   status() -> ApiResponse<StatusResult>
  *   draw()   -> ApiResponse<DrawResult>
  *   reset()  -> ApiResponse<StatusResult>
- *   open_manage() -> ApiResponse<boolean>
+ *   open_manage() -> ApiResponse<LaunchResult>
  */
 
 import { Reel } from './reel.js';
