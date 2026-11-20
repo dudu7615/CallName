@@ -6,29 +6,21 @@
 
 from collections.abc import Callable
 from pathlib import Path
+import subprocess
 
 import webview
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import ValidationError
 
 from callname.db import Database, DbError
 from callname.draw import DrawSession
 from callname.schemas import (
-    AddPersonResult,
     ApiResponse,
     DeleteOneResult,
     FilePickResult,
-    LaunchResult,
-    ClearCountsResult,
-    DeleteManyResult,
-    DrawResult,
     ImportMode,
-    ImportPreview,
-    ImportResult,
-    PersonItem,
+    LaunchResult,
     PersonPatch,
-    StatsResult,
-    StatusResult,
     fail,
     ok,
 )
@@ -54,7 +46,7 @@ class MainApi:
         self._session = session
         self._db = db
         self._window: webview.Window | None = None
-        self._manager: object | None = None
+        self._manager: subprocess.Popen[bytes] | None = None
 
     def attach(self, window: webview.Window) -> None:
         """由 app.py 注入窗口句柄；下划线属性不会被 pywebview 暴露。"""
@@ -83,11 +75,9 @@ class MainApi:
 
     def open_manage(self) -> dict[str, object]:
         try:
-            proc: object | None = self._manager
-            if proc is not None and getattr(proc, "poll", None) is not None:
-                poll = getattr(proc, "poll")
-                if callable(poll) and poll() is None:
-                    return _dump(ok(LaunchResult(launched=True, already_running=True)))
+            proc = self._manager
+            if proc is not None and proc.poll() is None:
+                return _dump(ok(LaunchResult(launched=True, already_running=True)))
             from callname.app import spawn_manager
 
             self._manager = spawn_manager(self._db.path)
@@ -127,8 +117,11 @@ class ManageApi:
         return self._call("add_person", lambda: self._db.add_person(name, weight))
 
     def update_person(self, pid: int, patch: dict[str, object]) -> dict[str, object]:
-        parsed = PersonPatch.model_validate(patch)
-        return self._call("update_person", lambda: self._db.update_person(pid, parsed))
+        # 校验放进 lambda：否则 ValidationError 会绕过统一信封直接抛给桥。
+        return self._call(
+            "update_person",
+            lambda: self._db.update_person(pid, PersonPatch.model_validate(patch)),
+        )
 
     def set_active(self, pid: int, active: bool) -> dict[str, object]:
         return self._call("set_active", lambda: self._db.set_active(pid, active))
@@ -195,6 +188,10 @@ class ManageApi:
         except (DbError, RosterError) as exc:
             logger.warning("{} rejected: {} {}", name, exc.code, exc.message)
             return _dump(fail(exc.code, exc.message))
+        except ValidationError as exc:
+            # 桥上传来的参数类型不对：同样是用户可见的输入错误，不是内部 bug。
+            logger.warning("{} bad payload: {}", name, exc)
+            return _dump(fail("BAD_PAYLOAD", "提交的数据格式不正确，请刷新后重试"))
         except Exception as exc:  # pragma: no cover
             logger.exception("{} failed", name)
             return _dump(fail("INTERNAL", f"{name} 失败：{exc}"))

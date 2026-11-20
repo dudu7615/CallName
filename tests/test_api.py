@@ -82,6 +82,24 @@ def test_manage_error_envelope(db: Database) -> None:
     assert missing["data"]["deleted"] is False  # type: ignore[index]
 
 
+def test_bad_patch_payload_stays_in_envelope(db: Database) -> None:
+    """pydantic 校验失败也必须走统一信封，不能把 ValidationError 抛给桥。"""
+    api = ManageApi(db=db)
+    pid = db.add_person("张三", 1).person.id
+    assert pid is not None
+
+    bad_patches: list[dict[str, object]] = [
+        {"weight": "abc"},
+        {"name": 123},
+        {"active": "maybe"},
+    ]
+    for patch in bad_patches:
+        payload = _assert_json(api.update_person(pid, patch))
+        assert payload["ok"] is False, patch
+        assert payload["error"]["code"] == "BAD_PAYLOAD"  # type: ignore[index]
+        assert payload["error"]["message"]  # type: ignore[index]
+
+
 def test_manage_duplicate_warning(db: Database) -> None:
     api = ManageApi(db=db)
     api.add_person("张三", 1)
