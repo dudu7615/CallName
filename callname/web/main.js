@@ -10,7 +10,7 @@
 
 import { Reel } from './reel.js';
 
-const SPIN_MS = 2600;
+const SPIN_MS = 4200;
 const POLL_MS = 1500;
 const IDLE_DECOY_POOL = ['点名', '准备开始', '点击开始'];
 

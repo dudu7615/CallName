@@ -21,24 +21,40 @@ export class Reel {
     this.clip = clip;
     this.strip = strip;
     this.timer = null;
+    /** @type {HTMLElement | null} */
+    this.winnerEl = null;
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   }
 
-  /** 用名字数组构建条带，winIndex 位置是赢家。 */
+  /** 用名字数组构建条带，winIndex 位置是赢家（先不加高亮，由 reveal() 揭开）。 */
   build(names, winIndex) {
     const frag = document.createDocumentFragment();
+    let winner = /** @type {HTMLElement | null} */ (null);
     names.forEach((name, index) => {
       const cell = document.createElement('div');
-      cell.className = index === winIndex ? 'cell win' : 'cell';
+      cell.className = 'cell';
       cell.textContent = name;
+      if (index === winIndex) winner = cell;
       frag.appendChild(cell);
     });
     this.strip.replaceChildren(frag);
+    this.winnerEl = winner;
+  }
+
+  /** 给赢家格加金色高亮。滚动过程中不调用，避免提前泄露结果。 */
+  reveal({ pop = true } = {}) {
+    if (!this.winnerEl) return;
+    this.winnerEl.classList.add('win');
+    if (!pop) return;
+    this.winnerEl.classList.add('pop');
+    window.setTimeout(() => {
+      if (this.winnerEl) this.winnerEl.classList.remove('pop');
+    }, 740);
   }
 
   /** 静止时（无动画）把赢家格摆到高亮带中心。 */
   settle() {
-    const winner = this.strip.querySelector('.cell.win');
+    const winner = this.winnerEl;
     if (!winner) return;
     this.strip.style.transition = 'none';
     this.strip.style.transform = `translate3d(0, ${this._restY(winner)}, 0)`;
@@ -47,7 +63,7 @@ export class Reel {
   }
 
   /**
-   * 播放抽签动画。
+   * 播放抽签动画。赢家全程不加高亮，停稳后才由 reveal() 点亮。
    * @param {string[]} decoys 假名池
    * @param {Winner} winner 赢家
    * @param {number} duration 动画时长 ms
@@ -59,11 +75,12 @@ export class Reel {
     const winIndex = above.length;
     this.build([...above, winner.name, ...below], winIndex);
 
-    const winnerEl = this.strip.querySelector('.cell.win');
+    const winnerEl = this.winnerEl;
     if (!winnerEl) return;
 
     if (this.reduced) {
       this.settle();
+      this.reveal();
       return;
     }
 
@@ -98,8 +115,8 @@ export class Reel {
       this.strip.style.transform = `translate3d(0, ${restY}px, 0)`;
     });
 
-    winnerEl.classList.add('pop');
-    window.setTimeout(() => winnerEl.classList.remove('pop'), 460);
+    // 停稳之后才点亮赢家，滚动过程中不泄露结果
+    this.reveal();
   }
 
   /** 下一次抽签前的“跳变”：换内容并瞬间归位，用户看不到中间静止帧。 */
@@ -108,6 +125,7 @@ export class Reel {
     const below = this._pick(decoys, BELOW);
     this.build([...above, winner.name, ...below], above.length);
     this.settle();
+    this.reveal({ pop: false });
     this.clip.classList.add('is-kicking');
     window.setTimeout(() => this.clip.classList.remove('is-kicking'), 140);
   }

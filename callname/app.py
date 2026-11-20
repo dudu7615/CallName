@@ -69,7 +69,8 @@ def _start_auto(window: webview.Window, count: int) -> None:
         for index in range(count):
             logger.info("auto draw {}/{}", index + 1, count)
             window.evaluate_js("window.clickStart && window.clickStart()")
-            time.sleep(3.4)
+            # 必须长于前端 SPIN_MS（4200ms）+ 停稳点亮的余量
+            time.sleep(5.0)
         state = window.evaluate_js("window.__state ? window.__state() : null")
         logger.info("auto final state: {}", state)
 
