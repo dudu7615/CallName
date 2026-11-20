@@ -18,6 +18,9 @@ from callname.db import Database
 from callname.draw import DrawSession
 from callname.paths import DB_PATH, ICON, ROOT, WEB_DIR
 
+# 与 style.css 的 --bg 一致：窗口创建时就用它，避免启动白闪。
+BOARD_BG = "#070d18"
+
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="callname", description="随机点名器")
@@ -84,6 +87,7 @@ def _open_main(db: Database, *, debug: bool, auto: int) -> int:
         width=1280,
         height=760,
         min_size=(900, 600),
+        background_color=BOARD_BG,
     )
     handle = _require_window(window)
     api.attach(handle)
@@ -102,6 +106,7 @@ def _open_manage(db: Database, *, debug: bool) -> int:
         width=1100,
         height=760,
         min_size=(860, 560),
+        background_color=BOARD_BG,
     )
     api.attach(_require_window(window))
     webview.start(gui=_gui_backend(), debug=debug, http_server=True, icon=str(ICON))
