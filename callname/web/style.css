@@ -40,6 +40,9 @@
   --pill: 999px;
 
   --font-mono: "MapleMono NF CN", "Noto Sans Mono CJK SC", "Microsoft YaHei UI", monospace;
+
+  /* 让原生表单控件（复选框、数字框、滚动条）跟随深色主题 */
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }

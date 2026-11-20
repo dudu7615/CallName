@@ -12,7 +12,10 @@ const api = () => window.pywebview.api;
 
 const rowsBody = /** @type {HTMLElement} */ (document.getElementById('rows'));
 const emptyHint = /** @type {HTMLElement} */ (document.getElementById('empty'));
-const statsEl = /** @type {HTMLElement} */ (document.getElementById('stats'));
+const statTotal = /** @type {HTMLElement} */ (document.getElementById('stat-total'));
+const statActive = /** @type {HTMLElement} */ (document.getElementById('stat-active'));
+const statDraws = /** @type {HTMLElement} */ (document.getElementById('stat-draws'));
+const toastEl = /** @type {HTMLElement} */ (document.getElementById('toast'));
 const searchEl = /** @type {HTMLInputElement} */ (document.getElementById('search'));
 const newNameEl = /** @type {HTMLInputElement} */ (document.getElementById('new-name'));
 const newWeightEl = /** @type {HTMLInputElement} */ (document.getElementById('new-weight'));
@@ -40,13 +43,15 @@ async function unwrap(promise) {
   return response.data;
 }
 
+/** @type {number} */
+let toastTimer = 0;
+
+/** 提示条：独立元素，不再借用顶部的统计文案。 */
 function toast(message) {
-  const el = document.getElementById('stats');
-  if (!el) return;
-  const original = el.dataset.base || el.textContent || '';
-  el.dataset.base = original;
-  el.textContent = message;
-  window.setTimeout(() => { el.textContent = original; }, 2600);
+  toastEl.textContent = message;
+  toastEl.classList.add('show');
+  window.clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => toastEl.classList.remove('show'), 2600);
 }
 
 /** @param {string|null} iso */
@@ -125,26 +130,25 @@ function buildRow(person) {
   tr.appendChild(whenCell);
 
   const activeCell = document.createElement('td');
-  const tag = document.createElement('span');
-  tag.className = 'tag';
-  tag.textContent = person.active ? '启用' : '已停用';
-  activeCell.appendChild(tag);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'toggle';
+  toggle.setAttribute('aria-pressed', String(person.active));
+  toggle.title = person.active ? '点击停用' : '点击启用';
+  toggle.textContent = person.active ? '启用' : '停用';
+  toggle.addEventListener('click', () => { void setActive(person.id, !person.active); });
+  activeCell.appendChild(toggle);
   tr.appendChild(activeCell);
 
   const actionsCell = document.createElement('td');
   const actions = document.createElement('div');
   actions.className = 'row-actions';
-  const toggle = document.createElement('button');
-  toggle.type = 'button';
-  toggle.className = 'icon-btn';
-  toggle.textContent = person.active ? '停用' : '启用';
-  toggle.addEventListener('click', () => { void setActive(person.id, !person.active); });
   const remove = document.createElement('button');
   remove.type = 'button';
   remove.className = 'icon-btn danger';
   remove.textContent = '删除';
   remove.addEventListener('click', () => { void removePerson(person); });
-  actions.append(toggle, remove);
+  actions.appendChild(remove);
   actionsCell.appendChild(actions);
   tr.appendChild(actionsCell);
 
@@ -165,8 +169,9 @@ async function loadAll() {
     unwrap(api().stats()),
   ]);
   renderRows(people);
-  statsEl.dataset.base = `总人数 ${stats.total} · 启用 ${stats.active} · 累计抽中 ${stats.sum_draws}`;
-  statsEl.textContent = statsEl.dataset.base;
+  statTotal.textContent = String(stats.total);
+  statActive.textContent = String(stats.active);
+  statDraws.textContent = String(stats.sum_draws);
 }
 
 async function updatePerson(id, patch) {
