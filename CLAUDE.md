@@ -68,6 +68,10 @@ uv run mypy . --explicit-package-bases
 - **依赖标记**：`pyside6` / `qtpy` 仅 `sys_platform == 'linux'`。Windows 走 WebView2，
   打包时不应出现任何 Qt 包。
 - **`web/` 必须平铺**：pywebview 的 HTTP 根 = 传入 HTML 的所在目录，嵌套子目录会 404。
+- **字体随包分发**：`web/MapleMono-NF-CN-Regular.ttf`（OFL 1.1，许可证 `web/OFL.txt`）。
+  只有 Regular 一个字重，`font-weight: 700` 不会真的加粗——强调用颜色、
+  `text-shadow` 或 `-webkit-text-stroke`。改 `--item` 时不要给 `.cell` 加 padding/border：
+  `reel.js` 的 `_restY` 按单元格实测高度定位，高度被撑开会让赢家偏离高亮带。
 
 ## 数据
 

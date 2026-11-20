@@ -70,7 +70,13 @@ uv run main.py --auto 3                       # 自测：自动连抽 3 次
 | `callname/import_service.py` | 导入预览与落库编排 |
 | `callname/api.py` | pywebview 的 js_api 桥 |
 | `callname/app.py` | 启动参数与窗口 |
-| `callname/web/` | 前端（原生 HTML/CSS/JS，无构建步骤） |
+| `callname/web/` | 前端（原生 HTML/CSS/JS，无构建步骤；内置 Maple Mono 字体，见 `callname/web/OFL.txt`） |
+
+## 界面字体
+
+界面使用随包分发的 **Maple Mono NF CN**（`callname/web/MapleMono-NF-CN-Regular.ttf`），
+采用 SIL Open Font License 1.1，许可证全文见 `callname/web/OFL.txt`。
+字体文件是原样分发的，未做子集化或改名。
 
 ## 历史
 
