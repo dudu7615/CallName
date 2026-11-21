@@ -23,6 +23,53 @@
     0 30px 60px -30px rgba(0, 0, 0, .9);
 }
 
+/* .sheet 显式 flex 会盖掉 [hidden] 的 UA 样式，必须自己关掉 */
+.sheet[hidden] { display: none; }
+
+/* ---------- 锁屏 ---------- */
+.lock-layer { z-index: 40; }
+
+.lock-card {
+  width: min(400px, 92vw);
+  gap: 12px;
+}
+.lock-card h2 { margin-bottom: 4px; }
+
+.lock-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+}
+
+.lock-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+.lock-field[hidden] { display: none; }
+.lock-field .input { width: 100%; }
+
+.lock-error {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 122, 107, .35);
+  background: rgba(255, 122, 107, .1);
+  color: var(--danger);
+  font-size: 12px;
+}
+.lock-error[hidden] { display: none; }
+
+.lock-card .modal-actions {
+  margin: 6px -24px 0;
+  padding: 14px 24px 0;
+}
+.lock-card .btn-small { width: 100%; padding: 10px 16px; }
+
 /* ---------- 顶栏 ---------- */
 .sheet-head {
   display: flex;

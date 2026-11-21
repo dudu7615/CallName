@@ -10,13 +10,35 @@
 <body class="manage-page">
   <div class="board-backdrop"></div>
 
-  <div class="sheet">
+  <!-- 锁屏：未解锁前 .sheet 保持 hidden，避免名单在背后闪现 -->
+  <div id="lock" class="modal lock-layer">
+    <form id="lock-form" class="modal-card lock-card" autocomplete="off">
+      <h2 id="lock-title">输入管理员密码</h2>
+      <p id="lock-hint" class="lock-hint">名单管理需要管理员密码</p>
+
+      <label class="lock-field">
+        密码
+        <input id="lock-password" class="input" type="password" autocomplete="current-password" />
+      </label>
+      <label id="lock-confirm-field" class="lock-field" hidden>
+        再输一遍
+        <input id="lock-confirm" class="input" type="password" autocomplete="new-password" />
+      </label>
+
+      <p id="lock-error" class="lock-error" role="alert" hidden></p>
+
+      <footer class="modal-actions">
+        <button id="lock-submit" class="btn btn-small btn-primary" type="submit">解锁</button>
+      </footer>
+    </form>
+  </div>
+
+  <div class="sheet" hidden>
     <header class="sheet-head">
       <div class="title-block">
         <h1>名单管理</h1>
         <p class="subtitle">权重只影响先被点到的概率</p>
       </div>
-
       <div class="stats">
         <div class="stat">
           <span class="stat-label">总人数</span>
@@ -56,6 +78,7 @@
       <button id="import" class="btn btn-small btn-ghost" type="button">导入文件…</button>
       <button id="delete-selected" class="btn btn-small btn-danger" type="button">删除所选</button>
       <button id="clear-counts" class="btn btn-small btn-ghost" type="button">重置累计次数</button>
+      <button id="change-password" class="btn btn-small btn-ghost" type="button">修改密码</button>
     </section>
 
     <p class="hint">权重只影响谁更可能先被点到；每人每轮仍恰好被点一次。</p>
@@ -124,6 +147,33 @@
         <button id="import-confirm" class="btn btn-small btn-primary" type="button">确认导入</button>
       </footer>
     </div>
+  </div>
+
+  <!-- 修改密码弹层 -->
+  <div id="password-modal" class="modal" hidden>
+    <form id="password-form" class="modal-card" autocomplete="off">
+      <h2>修改管理员密码</h2>
+      <div class="modal-body">
+        <label class="lock-field">
+          原密码
+          <input id="old-password" class="input" type="password" autocomplete="current-password" />
+        </label>
+        <label class="lock-field">
+          新密码
+          <input id="new-password" class="input" type="password" autocomplete="new-password" />
+        </label>
+        <label class="lock-field">
+          再输一遍新密码
+          <input id="new-password-confirm" class="input" type="password" autocomplete="new-password" />
+        </label>
+        <p class="hint">密码至少 4 位。忘记密码时可用 <code>CallName.exe --reset-password</code> 清空。</p>
+        <p id="password-error" class="lock-error" role="alert" hidden></p>
+      </div>
+      <footer class="modal-actions">
+        <button id="password-cancel" class="btn btn-small btn-ghost" type="button">取消</button>
+        <button class="btn btn-small btn-primary" type="submit">保存</button>
+      </footer>
+    </form>
   </div>
 
   <!-- 通用确认弹层（嵌入式 WebView 的 confirm() 不可靠） -->
