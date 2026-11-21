@@ -12,10 +12,12 @@ import webview
 from loguru import logger
 from pydantic import ValidationError
 
+from callname import auth
 from callname.db import Database, DbError
 from callname.draw import DrawSession
 from callname.schemas import (
     ApiResponse,
+    AuthState,
     DeleteOneResult,
     FilePickResult,
     ImportMode,
@@ -88,29 +90,92 @@ class MainApi:
 
 
 class ManageApi:
-    """名单管理窗口。"""
+    """名单管理窗口。
+
+    所有业务方法都要求先解锁；解锁态只活在本进程内存里
+    （pywebview 默认 private_mode，localStorage 不保留，也不该持久化）。
+    """
 
     def __init__(self, *, db: Database) -> None:
         self._db = db
         self._window: webview.Window | None = None
+        self._unlocked = False
 
     def attach(self, window: webview.Window) -> None:
         self._window = window
 
+    # -- 管理员密码 -------------------------------------------------------
+    def auth_state(self) -> dict[str, object]:
+        """无需解锁：前端据此决定锁屏显示「设置」还是「解锁」。"""
+        try:
+            return _dump(ok(self._state()))
+        except Exception as exc:  # pragma: no cover
+            logger.exception("auth_state failed")
+            return _dump(fail("INTERNAL", f"读取密码状态失败：{exc}"))
+
+    def setup_password(self, password: str, confirm: str) -> dict[str, object]:
+        """首次设置；已配置时拒绝，避免被绕过验证直接改密码。"""
+
+        def action() -> AuthState:
+            if self._db.get_admin_password_hash():
+                raise DbError("ALREADY_CONFIGURED", "管理员密码已设置，请输入原密码解锁")
+            if password != confirm:
+                raise DbError("PASSWORD_MISMATCH", "两次输入的密码不一致")
+            self._db.set_admin_password_hash(auth.hash_password(password))
+            self._unlocked = True
+            logger.info("admin password configured")
+            return self._state()
+
+        return self._call("setup_password", action, guard=False)
+
+    def unlock(self, password: str) -> dict[str, object]:
+        def action() -> AuthState:
+            stored = self._db.get_admin_password_hash()
+            if not stored:
+                raise DbError("NOT_CONFIGURED", "还没有设置管理员密码")
+            if not auth.verify_password(password, stored):
+                logger.warning("unlock rejected: wrong password")
+                raise DbError("BAD_PASSWORD", "密码不正确")
+            if auth.needs_rehash(stored):
+                # 参数升级：顺手把旧哈希重写成当前强度，用户无感。
+                self._db.set_admin_password_hash(auth.hash_password(password))
+                logger.info("admin password hash upgraded")
+            self._unlocked = True
+            return self._state()
+
+        return self._call("unlock", action, guard=False)
+
+    def change_password(
+        self, old: str, new: str, confirm: str
+    ) -> dict[str, object]:
+        """需已解锁：先验旧密码，再校验新密码并重写哈希。"""
+
+        def action() -> AuthState:
+            stored = self._db.get_admin_password_hash()
+            if not stored:
+                raise DbError("NOT_CONFIGURED", "还没有设置管理员密码")
+            if not auth.verify_password(old, stored):
+                raise DbError("BAD_PASSWORD", "原密码不正确")
+            if new != confirm:
+                raise DbError("PASSWORD_MISMATCH", "两次输入的新密码不一致")
+            self._db.set_admin_password_hash(auth.hash_password(new))
+            logger.info("admin password changed")
+            return self._state()
+
+        return self._call("change_password", action, guard=True)
+
+    def _state(self) -> AuthState:
+        return AuthState(
+            configured=bool(self._db.get_admin_password_hash()),
+            unlocked=self._unlocked,
+        )
+
     # -- 查询 -------------------------------------------------------------
     def list_people(self, query: str = "") -> dict[str, object]:
-        try:
-            return _dump(ok(self._db.list_people(query)))
-        except Exception as exc:  # pragma: no cover
-            logger.exception("list_people failed")
-            return _dump(fail("INTERNAL", f"读取名单失败：{exc}"))
+        return self._call("list_people", lambda: self._db.list_people(query))
 
     def stats(self) -> dict[str, object]:
-        try:
-            return _dump(ok(self._db.stats()))
-        except Exception as exc:  # pragma: no cover
-            logger.exception("stats failed")
-            return _dump(fail("INTERNAL", f"读取统计失败：{exc}"))
+        return self._call("stats", self._db.stats)
 
     # -- 增删改 -----------------------------------------------------------
     def add_person(self, name: str, weight: int = 1) -> dict[str, object]:
@@ -140,20 +205,23 @@ class ManageApi:
 
     # -- 导入 -------------------------------------------------------------
     def pick_import_file(self) -> dict[str, object]:
-        window = self._window
-        if window is None:
-            return _dump(fail("NO_WINDOW", "窗口尚未就绪"))
-        try:
-            picked = window.create_file_dialog(
-                webview.FileDialog.OPEN,
-                file_types=("名单文件 (*.yml;*.yaml;*.txt;*.csv;*.json;*.pkl)",),
-            )
-        except Exception as exc:  # pragma: no cover
-            logger.exception("pick_import_file failed")
-            return _dump(fail("DIALOG_FAILED", f"无法打开文件选择框：{exc}"))
-        if not picked:
-            return _dump(ok(FilePickResult(path=None)))
-        return _dump(ok(FilePickResult(path=str(picked[0]))))
+        def action() -> FilePickResult:
+            window = self._window
+            if window is None:
+                raise DbError("NO_WINDOW", "窗口尚未就绪")
+            try:
+                picked = window.create_file_dialog(
+                    webview.FileDialog.OPEN,
+                    file_types=("名单文件 (*.yml;*.yaml;*.txt;*.csv;*.json;*.pkl)",),
+                )
+            except Exception as exc:
+                logger.exception("pick_import_file dialog failed")
+                raise DbError("DIALOG_FAILED", f"无法打开文件选择框：{exc}") from exc
+            if not picked:
+                return FilePickResult(path=None)
+            return FilePickResult(path=str(picked[0]))
+
+        return self._call("pick_import_file", action)
 
     def preview_import(self, path: str) -> dict[str, object]:
         from callname.import_service import preview_import
@@ -180,12 +248,17 @@ class ManageApi:
         )
 
     # -- 内部 -------------------------------------------------------------
-    def _call[T](self, name: str, action: Callable[[], T]) -> dict[str, object]:
+    def _call[T](
+        self, name: str, action: Callable[[], T], *, guard: bool = True
+    ) -> dict[str, object]:
         from callname.importers import RosterError
 
+        if guard and not self._unlocked:
+            logger.warning("{} rejected: locked", name)
+            return _dump(fail("LOCKED", "请先解锁名单管理"))
         try:
             return _dump(ok(action()))
-        except (DbError, RosterError) as exc:
+        except (DbError, RosterError, auth.AuthError) as exc:
             logger.warning("{} rejected: {} {}", name, exc.code, exc.message)
             return _dump(fail(exc.code, exc.message))
         except ValidationError as exc:

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from callname.api import ManageApi
 from callname.db import Database
 
 
@@ -14,6 +15,14 @@ def db(tmp_path: Path) -> Iterator[Database]:
     database.migrate()
     yield database
     database.close()
+
+
+@pytest.fixture()
+def manage_api(db: Database) -> ManageApi:
+    """已设置管理员密码并解锁的 ManageApi；业务用例不必重复走一遍锁屏。"""
+    api = ManageApi(db=db)
+    assert api.setup_password("test-pass", "test-pass")["ok"] is True
+    return api
 
 
 @pytest.fixture()

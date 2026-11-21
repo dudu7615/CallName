@@ -43,8 +43,8 @@ def test_main_empty_roster_envelope(db: Database) -> None:
     assert payload["error"]["code"] == "EMPTY_ROSTER"  # type: ignore[index]
 
 
-def test_manage_crud_envelopes(db: Database) -> None:
-    api = ManageApi(db=db)
+def test_manage_crud_envelopes(manage_api: ManageApi) -> None:
+    api = manage_api
 
     added = _assert_json(api.add_person("张三", 3))
     assert added["ok"] is True
@@ -68,8 +68,8 @@ def test_manage_crud_envelopes(db: Database) -> None:
     assert stats["data"]["total"] == 0  # type: ignore[index]
 
 
-def test_manage_error_envelope(db: Database) -> None:
-    api = ManageApi(db=db)
+def test_manage_error_envelope(manage_api: ManageApi) -> None:
+    api = manage_api
     payload = _assert_json(api.add_person("  ", 1))
     assert payload["ok"] is False
     assert payload["error"]["code"] == "BAD_NAME"  # type: ignore[index]
@@ -82,9 +82,9 @@ def test_manage_error_envelope(db: Database) -> None:
     assert missing["data"]["deleted"] is False  # type: ignore[index]
 
 
-def test_bad_patch_payload_stays_in_envelope(db: Database) -> None:
+def test_bad_patch_payload_stays_in_envelope(manage_api: ManageApi, db: Database) -> None:
     """pydantic 校验失败也必须走统一信封，不能把 ValidationError 抛给桥。"""
-    api = ManageApi(db=db)
+    api = manage_api
     pid = db.add_person("张三", 1).person.id
     assert pid is not None
 
@@ -100,15 +100,15 @@ def test_bad_patch_payload_stays_in_envelope(db: Database) -> None:
         assert payload["error"]["message"]  # type: ignore[index]
 
 
-def test_manage_duplicate_warning(db: Database) -> None:
-    api = ManageApi(db=db)
+def test_manage_duplicate_warning(manage_api: ManageApi) -> None:
+    api = manage_api
     api.add_person("张三", 1)
     payload = _assert_json(api.add_person("张三", 1))
     assert payload["data"]["warning"] == "DUPLICATE_NAME"  # type: ignore[index]
 
 
-def test_manage_import_flow(db: Database, tmp_path: Path) -> None:
-    api = ManageApi(db=db)
+def test_manage_import_flow(manage_api: ManageApi, db: Database, tmp_path: Path) -> None:
+    api = manage_api
     path = tmp_path / "roster.txt"
     path.write_text("张三\n李四\n", encoding="utf-8")
 
@@ -126,8 +126,8 @@ def test_manage_import_flow(db: Database, tmp_path: Path) -> None:
     assert again["data"]["db_dups"] == 2  # type: ignore[index]
 
 
-def test_import_keeps_explicit_weights_and_fills_default(db: Database, tmp_path: Path) -> None:
-    api = ManageApi(db=db)
+def test_import_keeps_explicit_weights_and_fills_default(manage_api: ManageApi, db: Database, tmp_path: Path) -> None:
+    api = manage_api
     path = tmp_path / "mixed.yml"
     path.write_text("- name: 张三\n  weight: 5\n- name: 李四\n", encoding="utf-8")
 
@@ -139,8 +139,8 @@ def test_import_keeps_explicit_weights_and_fills_default(db: Database, tmp_path:
     assert weights == {"张三": 5, "李四": 2}
 
 
-def test_pick_import_file_without_window(db: Database) -> None:
-    api = ManageApi(db=db)
+def test_pick_import_file_without_window(manage_api: ManageApi) -> None:
+    api = manage_api
     payload = _assert_json(api.pick_import_file())
     assert payload["ok"] is False
     assert payload["error"]["code"] == "NO_WINDOW"  # type: ignore[index]
