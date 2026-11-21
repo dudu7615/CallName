@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>点名</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="main.css" />
+</head>
+<body class="main-page">
+  <div class="board-backdrop"></div>
+
+  <main class="stage">
+    <header class="hud">
+      <div class="hud-cycle">
+        <span class="hud-label">轮次</span>
+        <span id="hud-cycle" class="hud-value">1</span>
+      </div>
+
+      <div class="hud-progress">
+        <div class="hud-track" role="progressbar" aria-label="本轮进度"
+             aria-valuemin="0" aria-valuenow="0" id="hud-track">
+          <div id="hud-fill" class="hud-fill"></div>
+        </div>
+        <span id="hud-drawn" class="hud-sub">0 / 0</span>
+      </div>
+
+      <div class="hud-remaining">
+        <span class="hud-label">剩余</span>
+        <span id="hud-remaining" class="hud-value">0</span>
+      </div>
+    </header>
+
+    <section class="reel" aria-label="抽签滚轮">
+      <div class="clip" id="clip">
+        <div class="band"></div>
+        <div class="strip" id="strip"></div>
+        <div class="fade"></div>
+        <span class="reel-notch reel-notch-top" aria-hidden="true"></span>
+        <span class="reel-notch reel-notch-bottom" aria-hidden="true"></span>
+      </div>
+    </section>
+
+    <footer class="controls">
+      <button id="start" class="btn btn-primary" type="button">
+        <span>开始点名</span>
+        <kbd>空格</kbd>
+      </button>
+      <button id="reset" class="btn btn-ghost" type="button"
+              title="重新开始一轮（不清空累计次数）">重置列表</button>
+      <button id="manage" class="btn btn-icon" type="button" title="名单管理" aria-label="名单管理">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3.2" />
+          <path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z" />
+        </svg>
+      </button>
+    </footer>
+
+    <p id="toast" class="toast" role="status" aria-live="polite"></p>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>
