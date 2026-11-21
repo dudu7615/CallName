@@ -31,6 +31,8 @@ MANIFEST
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
+# 打包配置必须入库，否则干净克隆与 CI 都打不了包
+!packaging/*.spec
 
 # Installer logs
 pip-log.txt
@@ -210,3 +212,7 @@ __marimo__/
 callname.db
 callname.db-wal
 callname.db-shm
+
+# CallName 运行期产物（冻结后写在 exe 旁边，开发时也可能出现）
+callname.log
+callname.log.*
