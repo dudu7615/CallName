@@ -45,6 +45,7 @@ uv run main.py --manage   # 名单管理窗口
 uv run main.py --auto 3   # 自测：自动连抽 3 次（配合 xwd 截图验收）
 uv run pytest -q
 uv run mypy . --explicit-package-bases
+uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅 Windows）
 ```
 
 ## 架构要点（改代码前必读）
@@ -68,6 +69,11 @@ uv run mypy . --explicit-package-bases
 - **依赖标记**：`pyside6` / `qtpy` 仅 `sys_platform == 'linux'`。Windows 走 WebView2，
   打包时不应出现任何 Qt 包。
 - **`web/` 必须平铺**：pywebview 的 HTTP 根 = 传入 HTML 的所在目录，嵌套子目录会 404。
+- **冻结后路径分两套**：`paths.BUNDLE`（资源，=`_internal/`）与 `paths.APP_DIR`
+  （exe 所在目录，可写，`callname.db` / `callname.log` 落这里）。spec 里前端必须
+  打到 `callname/web`，对不上是白屏而不是构建失败。
+- **`pywebview` 在 Windows 运行期才 import `platforms.winforms`**，spec 里必须显式
+  `hiddenimports`；`webview.platforms.qt` 不能列，Windows 产物里不该有 Qt。
 - **字体随包分发**：`web/MapleMono-NF-CN-Regular.ttf`（OFL 1.1，许可证 `web/OFL.txt`）。
   只有 Regular 一个字重，`font-weight: 700` 不会真的加粗——强调用颜色、
   `text-shadow` 或 `-webkit-text-stroke`。改 `--item` 时不要给 `.cell` 加 padding/border：

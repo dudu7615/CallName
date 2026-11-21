@@ -18,6 +18,7 @@ uv run main.py --manage   # 名单管理窗口（也可以点主窗口右下角 
 ```
 
 数据库 `callname.db` 生成在程序目录旁边，拷走整个目录即可换电脑。
+打包版（Windows）里 exe 旁边的 `callname.db` 就是它，安装包不会覆盖、卸载也不会删。
 
 ## 用法
 
@@ -77,6 +78,25 @@ uv run main.py --auto 3                       # 自测：自动连抽 3 次
 界面使用随包分发的 **Maple Mono NF CN**（`callname/web/MapleMono-NF-CN-Regular.ttf`），
 采用 SIL Open Font License 1.1，许可证全文见 `callname/web/OFL.txt`。
 字体文件是原样分发的，未做子集化或改名。
+
+## 打包与发布
+
+Windows 专用，PyInstaller 不支持交叉编译。详细说明见 [`packaging/README.md`](packaging/README.md)。
+
+```powershell
+uv sync --group build
+uv run pyinstaller packaging/main.spec --noconfirm --clean   # → dist/CallName/
+ISCC.exe /DAppVersion=2.1.0 packaging\setup.iss               # → dist\installer\
+```
+
+**合并进 `main` 后 GitHub Actions 会自动跑测试、打包并发布**，产物在
+Actions 的 Artifacts 与 Release 里；手动触发跑别的分支只打包、不发布。
+发版本的流程：在 PR 里改 `pyproject.toml` 的 `version` → 合并进 `main`。
+
+产物：
+
+- `CallName-Setup-<版本>.exe` —— 安装包（装到 `%LOCALAPPDATA%\CallName`）
+- `CallName-portable-<版本>.zip` —— 免安装版，解压双击 `CallName.exe`
 
 ## 历史
 
