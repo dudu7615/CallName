@@ -16,7 +16,7 @@ from callname import __version__
 from callname.api import MainApi, ManageApi
 from callname.db import Database
 from callname.draw import DrawSession
-from callname.paths import DB_PATH, ICON, ROOT, WEB_DIR
+from callname.paths import APP_DIR, DB_PATH, ICON, LOG_PATH, WEB_DIR
 
 # 与 style.css 的 --bg 一致：窗口创建时就用它，避免启动白闪。
 BOARD_BG = "#070d18"
@@ -35,9 +35,20 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
 
 
 def _configure_logging(*, debug: bool) -> None:
-    """入口处配置一次 loguru；保持默认格式，不传 format。"""
+    """入口处配置一次 loguru；保持默认格式，不传 format。
+
+    冻结后 console=False 没有 stderr，必须同时落文件，否则出错时连线索都没有。
+    日志文件跟着程序目录走，与 callname.db 一样属于「拷走整个目录就换电脑」。
+    """
     logger.remove()
     logger.add(sys.stderr, level="DEBUG" if debug else "INFO")
+    if getattr(sys, "frozen", False):
+        logger.add(
+            LOG_PATH,
+            level="DEBUG" if debug else "INFO",
+            rotation="1 MB",
+            retention=3,
+        )
 
 
 GuiBackend = Literal["qt", "gtk", "cef", "mshtml", "edgechromium", "android", "cocoa"]
@@ -127,7 +138,7 @@ def spawn_manager(db_path: Path) -> subprocess.Popen[bytes]:
     logger.info("spawn manager: {}", command)
     return subprocess.Popen(
         command,
-        cwd=str(ROOT),
+        cwd=str(APP_DIR),
         start_new_session=os.name == "posix",
     )
 
