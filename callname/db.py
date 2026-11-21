@@ -237,10 +237,6 @@ class Database:
     def set_admin_password_hash(self, value: str) -> None:
         self.set_meta(META_ADMIN_PASSWORD, value)
 
-    def clear_admin_password(self) -> None:
-        """找回：清掉哈希后，下次打开设置窗口回到「设置密码」。"""
-        self.set_meta(META_ADMIN_PASSWORD, "")
-
     def bump_roster_version(self) -> int:
         with self.transaction() as session:
             return self._bump_roster_version(session)

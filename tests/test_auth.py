@@ -61,9 +61,7 @@ def test_meta_password_slot(db: Database) -> None:
     db.set_admin_password_hash(hash_password("abcd"))
     stored = db.get_admin_password_hash()
     assert verify_password("abcd", stored) is True
-    db.clear_admin_password()
-    assert db.get_admin_password_hash() == ""
-    # 键名稳定，找回命令与测试都依赖它
+    # 键名稳定，外部手工改库与测试都依赖它；程序本身不提供重置入口
     assert META_ADMIN_PASSWORD == "admin_password"
 
 

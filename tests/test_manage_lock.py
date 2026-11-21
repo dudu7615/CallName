@@ -3,7 +3,8 @@
 import json
 
 from callname.api import ManageApi
-from callname.db import Database
+from callname.db import META_ADMIN_PASSWORD, Database
+from callname.models import Meta
 
 
 def _json(payload: object) -> dict[str, object]:
@@ -94,13 +95,18 @@ def test_change_password_requires_unlock(db: Database) -> None:
     assert _error(_json(locked.change_password("abcd", "efgh", "efgh"))) == "LOCKED"
 
 
-def test_reset_makes_window_ask_to_setup_again(db: Database) -> None:
-    api = ManageApi(db=db)
-    api.setup_password("abcd", "abcd")
-    db.clear_admin_password()
-    state = _data(_json(api.auth_state()))
+def test_missing_password_row_asks_to_setup_again(manage_api: ManageApi, db: Database) -> None:
+    """没有内置重置入口；只有手工清掉 meta 行，窗口才回到「设置密码」。"""
+    manage_api.add_person("张三", 1)
+    with db.transaction() as session:
+        row = session.get(Meta, META_ADMIN_PASSWORD)
+        assert row is not None
+        session.delete(row)
+
+    state = _data(_json(manage_api.auth_state()))
     assert state == {"configured": False, "unlocked": True}
     # 已解锁的进程不受影响；新进程回到「设置密码」。
     fresh = ManageApi(db=db)
     assert _data(_json(fresh.auth_state())) == {"configured": False, "unlocked": False}
     assert _json(fresh.setup_password("wxyz", "wxyz"))["ok"] is True
+    assert len(_json(fresh.list_people())["data"]) == 1  # type: ignore[arg-type]
