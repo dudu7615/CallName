@@ -25,6 +25,11 @@ BOARD_BG = "#070d18"
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="callname", description="随机点名器")
     parser.add_argument("--manage", action="store_true", help="打开名单管理窗口")
+    parser.add_argument(
+        "--reset-password",
+        action="store_true",
+        help="清空管理员密码（忘记密码时用），下次打开名单管理重新设置",
+    )
     parser.add_argument("--db", type=Path, default=DB_PATH, help="数据库路径")
     parser.add_argument("--debug", action="store_true", help="开启 WebView 调试")
     parser.add_argument(
@@ -152,6 +157,13 @@ def main(argv: list[str] | None = None) -> int:
     logger.info("callname {} db={}", __version__, db_path)
     db = Database(db_path)
     db.migrate()
+
+    # 找回密码：只清哈希、不开窗口。能运行本程序的人本来就能改库，
+    # 这个命令只是把「删库重来」变成可发现的正常路径。
+    if args.reset_password:
+        db.clear_admin_password()
+        logger.info("admin password cleared, next manage window will ask to set one")
+        return 0
 
     if args.manage:
         return _open_manage(db, debug=bool(args.debug))
