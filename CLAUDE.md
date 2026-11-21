@@ -41,7 +41,8 @@ Python 3.14，依赖用 uv 管理。
 ```bash
 uv sync
 uv run main.py            # 主窗口（抽签）
-uv run main.py --manage   # 名单管理窗口
+uv run main.py --manage   # 名单管理窗口（需管理员密码）
+uv run main.py --reset-password  # 忘记密码：清空哈希，下次打开设置窗口重设
 uv run main.py --auto 3   # 自测：自动连抽 3 次（配合 xwd 截图验收）
 uv run pytest -q
 uv run mypy . --explicit-package-bases
@@ -63,6 +64,11 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
   「每人每轮恰好一次」。UI 文案必须写清这一点。
 - **本轮已抽集合只在内存里**（`DrawSession._drawn`），不持久化；`draw_count` 才持久化。
   这是两个不同概念，文案不要混。
+- **设置窗口的锁是后端强制的**：`ManageApi` 未解锁时所有业务方法都返回 `LOCKED`。
+  新增业务方法必须走 `self._call(...)`（默认 guard），不要自己写 try/except；
+  `list_people` / `stats` / `pick_import_file` 曾经就是漏网的。密码只存 Argon2id
+  哈希（`meta.admin_password`），解锁态是本进程内存，窗口关闭即失效。
+  这是课堂防误触，不是安全边界——别在文档里把它说成权限系统。
 - **滚轮几何全部测量得出**（`getBoundingClientRect`），不要写死像素，否则 125% DPI 会偏。
   层级顺序：`.band`(z-index:0) → `.strip`(z-index:1) → `.fade`(z-index:3)，不能换。
 - **Linux 钉死 `gui="qt"`**：pywebview 在 Linux 会先试 GTK，装了 PyGObject 就会悄悄换后端。
@@ -82,7 +88,8 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
 ## 数据
 
 - `callname.db` 在程序目录旁，已被 `.gitignore` 忽略，不要提交。
-- 表：`person`（权重 / 累计次数 / 启用）、`draw_log`（审计）、`meta`（`roster_version` / `cycle`）。
+- 表：`person`（权重 / 累计次数 / 启用）、`draw_log`（审计）、
+  `meta`（`roster_version` / `cycle` / `admin_password`）。
 - 迁移：`PRAGMA user_version` + `MIGRATIONS` 列表；加迁移时追加函数并递增版本号。
 
 ## 测试与验收
