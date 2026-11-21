@@ -33,6 +33,7 @@ from callname.schemas import (
 
 META_ROSTER_VERSION = "roster_version"
 META_CYCLE = "cycle"
+META_ADMIN_PASSWORD = "admin_password"
 
 
 class DbError(Exception):
@@ -227,6 +228,18 @@ class Database:
 
     def get_roster_version(self) -> int:
         return int(self.get_meta(META_ROSTER_VERSION, "0"))
+
+    # -- 管理员密码 -------------------------------------------------------
+    def get_admin_password_hash(self) -> str:
+        """空串表示尚未设置密码（首次打开设置窗口时要求设置）。"""
+        return self.get_meta(META_ADMIN_PASSWORD, "")
+
+    def set_admin_password_hash(self, value: str) -> None:
+        self.set_meta(META_ADMIN_PASSWORD, value)
+
+    def clear_admin_password(self) -> None:
+        """找回：清掉哈希后，下次打开设置窗口回到「设置密码」。"""
+        self.set_meta(META_ADMIN_PASSWORD, "")
 
     def bump_roster_version(self) -> int:
         with self.transaction() as session:
