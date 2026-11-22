@@ -9,6 +9,18 @@ const api = () => window.pywebview.api;
 /** @typedef {{total:number,active:number,sum_draws:number,last_draw_at:string|null}} StatsResult */
 /** @typedef {{path:string,format:string,count:number,file_dups:number,db_dups:number,unweighted:number,names:string[]}} ImportPreview */
 /** @typedef {{path:string|null}} FilePickResult */
+/** @typedef {{configured:boolean,unlocked:boolean}} AuthState */
+
+const sheet = /** @type {HTMLElement} */ (document.querySelector('.sheet'));
+const lockLayer = /** @type {HTMLElement} */ (document.getElementById('lock'));
+const lockForm = /** @type {HTMLFormElement} */ (document.getElementById('lock-form'));
+const lockTitle = /** @type {HTMLElement} */ (document.getElementById('lock-title'));
+const lockHint = /** @type {HTMLElement} */ (document.getElementById('lock-hint'));
+const lockPassword = /** @type {HTMLInputElement} */ (document.getElementById('lock-password'));
+const lockConfirmField = /** @type {HTMLElement} */ (document.getElementById('lock-confirm-field'));
+const lockConfirm = /** @type {HTMLInputElement} */ (document.getElementById('lock-confirm'));
+const lockSubmit = /** @type {HTMLButtonElement} */ (document.getElementById('lock-submit'));
+const lockError = /** @type {HTMLElement} */ (document.getElementById('lock-error'));
 
 const rowsBody = /** @type {HTMLElement} */ (document.getElementById('rows'));
 const emptyHint = /** @type {HTMLElement} */ (document.getElementById('empty'));
@@ -344,8 +356,129 @@ async function commitImport() {
   }
 }
 
+// ---------- 锁屏 ----------
+/** 未解锁时操作区不绑定，避免按钮在锁屏背后可点。 */
+let managementBound = false;
+
+/** @param {string} message */
+function showLockError(message) {
+  lockError.textContent = message;
+  lockError.hidden = !message;
+}
+
+/** @param {boolean} needsSetup */
+function paintLock(needsSetup) {
+  lockTitle.textContent = needsSetup ? '设置管理员密码' : '输入管理员密码';
+  lockHint.textContent = needsSetup
+    ? '第一次使用名单管理，请先设置管理员密码（至少 4 位）'
+    : '名单管理需要管理员密码';
+  lockConfirmField.hidden = !needsSetup;
+  lockSubmit.textContent = needsSetup ? '设置并进入' : '解锁';
+  lockPassword.value = '';
+  lockConfirm.value = '';
+  lockPassword.setAttribute('autocomplete', needsSetup ? 'new-password' : 'current-password');
+  showLockError('');
+  lockLayer.hidden = false;
+  sheet.hidden = true;
+  lockPassword.focus();
+}
+
+async function enterManagement() {
+  lockLayer.hidden = true;
+  sheet.hidden = false;
+  if (!managementBound) {
+    bindManagement();
+    managementBound = true;
+  }
+  await loadAll().catch((error) => {
+    toast(`初始化失败：${error instanceof Error ? error.message : String(error)}`);
+  });
+}
+
+async function submitLock() {
+  const password = lockPassword.value;
+  const needsSetup = !lockConfirmField.hidden;
+  lockSubmit.disabled = true;
+  showLockError('');
+  try {
+    if (needsSetup) {
+      await unwrap(api().setup_password(password, lockConfirm.value));
+    } else {
+      await unwrap(api().unlock(password));
+    }
+    await enterManagement();
+  } catch (error) {
+    showLockError(error instanceof Error ? error.message : String(error));
+    lockPassword.select();
+  } finally {
+    lockSubmit.disabled = false;
+  }
+}
+
+async function bootLock() {
+  try {
+    /** @type {AuthState} */
+    const state = await unwrap(api().auth_state());
+    if (state.unlocked) {
+      await enterManagement();
+    } else {
+      paintLock(!state.configured);
+    }
+  } catch (error) {
+    paintLock(false);
+    showLockError(`无法读取密码状态：${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+// ---------- 修改密码 ----------
+const passwordModal = /** @type {HTMLElement} */ (document.getElementById('password-modal'));
+const passwordForm = /** @type {HTMLFormElement} */ (document.getElementById('password-form'));
+const passwordError = /** @type {HTMLElement} */ (document.getElementById('password-error'));
+
+/** @param {string} message */
+function showPasswordError(message) {
+  passwordError.textContent = message;
+  passwordError.hidden = !message;
+}
+
+function openPasswordModal() {
+  passwordForm.reset();
+  showPasswordError('');
+  passwordModal.hidden = false;
+  /** @type {HTMLInputElement} */ (document.getElementById('old-password')).focus();
+}
+
+async function submitPasswordChange() {
+  const oldPassword = /** @type {HTMLInputElement} */ (document.getElementById('old-password')).value;
+  const newPassword = /** @type {HTMLInputElement} */ (document.getElementById('new-password')).value;
+  const confirm = /** @type {HTMLInputElement} */ (document.getElementById('new-password-confirm')).value;
+  showPasswordError('');
+  try {
+    await unwrap(api().change_password(oldPassword, newPassword, confirm));
+    passwordModal.hidden = true;
+    toast('密码已修改');
+  } catch (error) {
+    showPasswordError(error instanceof Error ? error.message : String(error));
+  }
+}
+
 // ---------- 绑定 ----------
 function bind() {
+  lockForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void submitLock();
+  });
+  passwordForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    void submitPasswordChange();
+  });
+  document.getElementById('password-cancel')?.addEventListener('click', () => {
+    passwordModal.hidden = true;
+  });
+  document.getElementById('change-password')?.addEventListener('click', openPasswordModal);
+}
+
+function bindManagement() {
   addBtn.addEventListener('click', () => { void addPerson(); });
   newNameEl.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') { event.preventDefault(); void addPerson(); }
@@ -372,11 +505,7 @@ function bind() {
 
 async function boot() {
   bind();
-  try {
-    await loadAll();
-  } catch (error) {
-    toast(`初始化失败：${error instanceof Error ? error.message : String(error)}`);
-  }
+  await bootLock();
 }
 
 window.addEventListener('pywebviewready', () => { void boot(); });

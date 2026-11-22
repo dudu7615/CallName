@@ -8,8 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import select
 
-from callname.db import Database, DbError
-from callname.models import DrawLog, Person
+from callname.db import META_ADMIN_PASSWORD, Database, DbError
+from callname.models import DrawLog, Meta, Person
 from callname.schemas import ImportMode, PersonPatch
 
 
@@ -194,3 +194,35 @@ def test_zero_weight_blocked_by_check_constraint(db: Database) -> None:
                 text("UPDATE person SET weight = 0 WHERE id = :pid"),
                 {"pid": person.id},
             )
+
+
+def test_replace_admin_password_is_conditional(db: Database) -> None:
+    """条件写：只有当前哈希仍等于读到的值时才写入。
+
+    两个管理窗口同时改密码时，后写者不能静默覆盖先写者。
+    """
+    assert db.get_admin_password_hash() == ""
+    # 首次设置：行不存在 → 插入
+    assert db.replace_admin_password("", "hash-a") is True
+    assert db.get_admin_password_hash() == "hash-a"
+
+    # 用旧值再改一次：条件不成立 → 失败，库里的值不动
+    assert db.replace_admin_password("", "hash-b") is False
+    assert db.get_admin_password_hash() == "hash-a"
+
+    # 读到的是最新值 → 写入成功
+    assert db.replace_admin_password("hash-a", "hash-c") is True
+    assert db.get_admin_password_hash() == "hash-c"
+
+
+def test_replace_admin_password_insert_race(db: Database) -> None:
+    """两个进程都以为「还没设置」时，只有一个能插入成功。
+
+    直接用一条已经占位的行模拟「对方已抢先插入」，条件写必须返回 False
+    而不是抛异常——调用方据此回 ALREADY_CONFIGURED。
+    """
+    with db.transaction() as session:
+        session.add(Meta(key=META_ADMIN_PASSWORD, value="first"))
+
+    assert db.replace_admin_password("", "second") is False
+    assert db.get_admin_password_hash() == "first"

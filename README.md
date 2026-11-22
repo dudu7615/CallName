@@ -13,8 +13,8 @@ uv sync
 ## 运行
 
 ```bash
-uv run main.py            # 主窗口：抽签
-uv run main.py --manage   # 名单管理窗口（也可以点主窗口右下角 ⚙）
+uv run main.py                    # 主窗口：抽签
+uv run main.py --manage           # 名单管理窗口（也可以点主窗口右下角 ⚙）
 ```
 
 数据库 `callname.db` 生成在程序目录旁边，拷走整个目录即可换电脑。
@@ -26,6 +26,21 @@ uv run main.py --manage   # 名单管理窗口（也可以点主窗口右下角 
 - 抽到过的人本轮不再出现；全部抽完会自动进入下一轮（HUD 显示「第 N 轮」）。
 - **重置列表**：重新开始一轮（**不清空**数据库里的累计抽中次数）。
 - **⚙**：打开名单管理，可增删改名字、改权重、启用/停用、导入旧名单、清零累计次数。
+
+## 管理员密码
+
+名单管理窗口由管理员密码保护：
+
+- **第一次打开设置窗口**时会要求设置密码（至少 4 位），设置后直接进入；
+- 之后每次打开设置窗口都要输入密码，输错会被拒绝并提示；
+- 解锁后可以在工具栏点「修改密码」，需要先输入原密码（会校验原密码）；
+- **不提供重置入口**，请妥善保管密码。只有数据库里 `meta` 表缺少
+  `admin_password` 这一行时，窗口才会重新要求设置密码——那需要你自己手工改
+  `callname.db`，目的是不让别人随手就能绕过。
+
+密码只以 Argon2id 哈希存在数据库 `meta` 表里，不落明文。这套密码的作用是
+课堂上防止学生随手改名单，**不是安全边界**：能读写 `callname.db` 的人本来就能
+直接改库，所以不设「重大安全功能」的预期。
 
 ## 权重是什么
 
@@ -66,6 +81,7 @@ uv run main.py --auto 3                       # 自测：自动连抽 3 次
 | `callname/models.py` | SQLModel 表定义（person / draw_log / meta） |
 | `callname/schemas.py` | pydantic 请求/响应模型（API 信封） |
 | `callname/db.py` | engine、PRAGMA、迁移、CRUD |
+| `callname/auth.py` | 管理员密码的 Argon2id 哈希与校验 |
 | `callname/draw.py` | 本轮会话与加权抽样 |
 | `callname/importers.py` | 名单解析（yml/txt/csv/json/pkl） |
 | `callname/import_service.py` | 导入预览与落库编排 |
@@ -86,7 +102,7 @@ Windows 专用，PyInstaller 不支持交叉编译。详细说明见 [`packaging
 ```powershell
 uv sync --group build
 uv run pyinstaller packaging/main.spec --noconfirm --clean   # → dist/CallName/
-ISCC.exe /DAppVersion=2.1.0 packaging\setup.iss               # → dist\installer\
+ISCC.exe /DAppVersion=2.2.0 packaging\setup.iss               # → dist\installer\
 ```
 
 **合并进 `main` 后 GitHub Actions 会自动跑测试、打包并发布**，产物在

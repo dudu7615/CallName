@@ -1,10 +1,11 @@
 [project]
 name = "callname"
-version = "2.1.0"
+version = "2.2.0"
 description = "随机点名工具（Web UI + SQLite）"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
+    "argon2-cffi>=25.1.0",
     "loguru>=0.7",
     "pydantic>=2.14",
     "pyside6>=6.8 ; sys_platform == 'linux'",

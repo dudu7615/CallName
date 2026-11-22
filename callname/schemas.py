@@ -186,3 +186,11 @@ class ClearCountsResult(BaseModel):
     people: int = Field(description="被清零的人数")
 
 
+class AuthState(BaseModel):
+    """设置窗口的锁状态；前端据此决定显示「设置密码」还是「解锁」。"""
+
+    configured: bool = Field(description="是否已经设置过管理员密码")
+    unlocked: bool = Field(description="当前进程是否已解锁")
+
+
+
