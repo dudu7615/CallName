@@ -8,12 +8,26 @@
 拖慢；参数调整后，`needs_rehash()` 会在下次成功校验时把旧哈希透明升级。
 """
 
-from argon2 import PasswordHasher
+from argon2 import PasswordHasher, extract_parameters
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
 #: 密码长度限制。上限只是防止有人往 meta 里塞兆级字符串。
 PASSWORD_MIN = 4
 PASSWORD_MAX = 128
+
+#: 校验时接受的 Argon2 参数上限。
+#:
+#: `PasswordHasher.verify()` 按**哈希串自己写的参数**分配内存、跑时间成本，
+#: 而 `meta.admin_password` 是用户可手工改的库行。若有人写进一个
+#: `m=4294967295` 的合法哈希，verify 会在抛异常前先把管理窗口的内存吃光。
+#: 所以我们只用上限以内的哈希；正常写入的参数（64 MiB / t=3 / p=1）远低于它。
+#: 上限留足余量，是为了将来调高参数时旧哈希仍能校验。
+_MAX_MEMORY_COST = 131072  # KiB = 128 MiB
+_MAX_TIME_COST = 10
+_MAX_PARALLELISM = 4
+_MAX_HASH_LEN = 1024
+_MAX_SALT_LEN = 1024
+_MAX_STORED_LEN = 512
 
 #: 单例即可：参数不可变，`verify` 自带线程安全。
 _HASHER = PasswordHasher(
@@ -51,9 +65,28 @@ def hash_password(password: str) -> str:
     return _HASHER.hash(validate_password(password))
 
 
+def _within_limits(stored: str) -> bool:
+    """先解析参数再决定要不要 verify，避免被极端参数拖垮进程。"""
+    if not stored or len(stored) > _MAX_STORED_LEN:
+        return False
+    try:
+        params = extract_parameters(stored)
+    except InvalidHashError:
+        return False
+    return (
+        params.memory_cost <= _MAX_MEMORY_COST
+        and params.time_cost <= _MAX_TIME_COST
+        and params.parallelism <= _MAX_PARALLELISM
+        and params.hash_len <= _MAX_HASH_LEN
+        and params.salt_len <= _MAX_SALT_LEN
+    )
+
+
 def verify_password(password: str, stored: str) -> bool:
-    """校验密码；坏哈希、空串一律当失败，不把异常抛给调用方。"""
-    if not stored or not password:
+    """校验密码；坏哈希、超限参数、空串一律当失败，不把异常抛给调用方。"""
+    if not _within_limits(stored):
+        return False
+    if not password or len(password) > PASSWORD_MAX:
         return False
     try:
         return _HASHER.verify(stored, password)
@@ -62,8 +95,8 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def needs_rehash(stored: str) -> bool:
-    """参数落后（或格式损坏）时返回 True；损坏的哈希不值得重写，返回 False。"""
-    if not stored:
+    """参数落后时返回 True；损坏或超出上限的哈希返回 False（不值得重写）。"""
+    if not _within_limits(stored):
         return False
     try:
         return _HASHER.check_needs_rehash(stored)

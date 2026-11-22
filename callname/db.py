@@ -16,6 +16,7 @@ from typing import Any
 from loguru import logger
 from sqlalchemy import delete, event, func, select, update
 from sqlalchemy.engine import Connection, Engine, create_engine
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, SQLModel, col
 
 from callname.models import DrawLog, Meta, Person
@@ -236,6 +237,34 @@ class Database:
 
     def set_admin_password_hash(self, value: str) -> None:
         self.set_meta(META_ADMIN_PASSWORD, value)
+
+    def replace_admin_password(self, expected: str, new: str) -> bool:
+        """条件写：仅当当前哈希仍等于 `expected` 时才写入 `new`。
+
+        设置窗口可能是多个进程（主窗口可以反复拉起管理窗口），两个进程同时
+        改密码时，先读再写会让后写的静默覆盖先写的，而两边都报成功。
+        把比较和写入放进同一条 SQL，竞争失败的一方拿到 False。
+
+        `expected` 为空串时表示「应当尚未设置」：行不存在就插入；若另一个
+        进程刚好抢先插入，插入会撞上主键，这里当作竞争失败返回 False。
+        """
+        try:
+            with self.transaction() as session:
+                result = session.execute(
+                    update(Meta)
+                    .where(col(Meta.key) == META_ADMIN_PASSWORD)
+                    .where(col(Meta.value) == expected)
+                    .values(value=new)
+                )
+                changed = int(getattr(result, "rowcount", 0) or 0)
+                if changed == 0 and expected == "":
+                    session.add(Meta(key=META_ADMIN_PASSWORD, value=new))
+                    session.flush()
+                    changed = 1
+                return changed > 0
+        except IntegrityError:
+            # 另一个进程刚好抢先插入了密码行。
+            return False
 
     def bump_roster_version(self) -> int:
         with self.transaction() as session:

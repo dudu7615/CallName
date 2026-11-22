@@ -33,6 +33,31 @@ def test_corrupt_hash_is_a_failure_not_a_crash() -> None:
         assert needs_rehash(stored) is False
 
 
+def test_extreme_parameters_are_rejected_before_allocating() -> None:
+    """verify() 会按哈希里写的参数分配内存，必须在上限外直接拒绝。
+
+    手工把 m 改到 4 GiB 仍是「合法」哈希串；若真的交给 argon2，管理窗口
+    会在返回 False 之前先被内存耗尽。
+    """
+    absurd = hash_password("abcd").replace("m=65536", "m=4294967295")
+    assert verify_password("abcd", absurd) is False
+    assert needs_rehash(absurd) is False
+
+    slow = hash_password("abcd").replace("t=3", "t=999999")
+    assert verify_password("abcd", slow) is False
+
+    # 长度异常的串不必解析
+    assert verify_password("abcd", "$argon2id$" + "x" * 4096) is False
+
+
+def test_slightly_stronger_parameters_still_verify() -> None:
+    """上限要留余量：将来把参数调高（例如 m=96 MiB）时旧哈希仍可用。"""
+    from argon2 import PasswordHasher
+
+    stronger = PasswordHasher(time_cost=4, memory_cost=98304, parallelism=2).hash("abcd")
+    assert verify_password("abcd", stronger) is True
+
+
 def test_rehash_detects_weaker_parameters() -> None:
     current = hash_password("abcd")
     assert needs_rehash(current) is False

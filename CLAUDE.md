@@ -67,6 +67,10 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
   新增业务方法必须走 `self._call(...)`（默认 guard），不要自己写 try/except；
   `list_people` / `stats` / `pick_import_file` 曾经就是漏网的。密码只存 Argon2id
   哈希（`meta.admin_password`），解锁态是本进程内存，窗口关闭即失效。
+  **密码写入必须走 `db.replace_admin_password(expected, new)`**：先读后写会让
+  两个管理窗口互相静默覆盖；条件写失败要回 `ALREADY_CONFIGURED` /
+  `PASSWORD_CONFLICT`。校验前先过 `auth._within_limits()`，因为 Argon2 会按
+  哈希串里写的参数分配内存，手工改库塞进极端参数会吃光内存。
   **程序不提供重置密码入口**：只有手工删掉 `meta` 里 `admin_password` 行，
   窗口才会回到「设置密码」。这是刻意的，别为了「方便」加回 `--reset-password`。
   这是课堂防误触，不是安全边界——别在文档里把它说成权限系统。

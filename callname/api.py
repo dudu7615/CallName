@@ -117,14 +117,18 @@ class ManageApi:
         """首次设置；已配置时拒绝，避免被绕过验证直接改密码。"""
 
         def action() -> AuthState:
-            if self._db.get_admin_password_hash():
+            stored = self._db.get_admin_password_hash()
+            if stored:
                 raise DbError("ALREADY_CONFIGURED", "管理员密码已设置，请输入原密码解锁")
             if password != confirm:
                 raise DbError("PASSWORD_MISMATCH", "两次输入的密码不一致")
-            self._db.set_admin_password_hash(auth.hash_password(password))
+            # 条件写：若另一个窗口刚好抢先设置了密码，这里失败而不是覆盖它。
+            if not self._db.replace_admin_password(stored, auth.hash_password(password)):
+                raise DbError("ALREADY_CONFIGURED", "管理员密码已设置，请输入原密码解锁")
             self._unlocked = True
             logger.info("admin password configured")
-            return self._state()
+            # 已经确定写入成功，不再读库：读失败不该把一次成功的设置报成错误。
+            return AuthState(configured=True, unlocked=True)
 
         return self._call("setup_password", action, guard=False)
 
@@ -137,11 +141,14 @@ class ManageApi:
                 logger.warning("unlock rejected: wrong password")
                 raise DbError("BAD_PASSWORD", "密码不正确")
             if auth.needs_rehash(stored):
-                # 参数升级：顺手把旧哈希重写成当前强度，用户无感。
-                self._db.set_admin_password_hash(auth.hash_password(password))
-                logger.info("admin password hash upgraded")
+                # 参数升级：只在哈希仍是我们刚验证的那个时重写，避免覆盖
+                # 另一个窗口同时改掉的新密码。
+                if self._db.replace_admin_password(stored, auth.hash_password(password)):
+                    logger.info("admin password hash upgraded")
+                else:
+                    logger.warning("rehash skipped: password changed concurrently")
             self._unlocked = True
-            return self._state()
+            return AuthState(configured=True, unlocked=True)
 
         return self._call("unlock", action, guard=False)
 
@@ -158,9 +165,12 @@ class ManageApi:
                 raise DbError("BAD_PASSWORD", "原密码不正确")
             if new != confirm:
                 raise DbError("PASSWORD_MISMATCH", "两次输入的新密码不一致")
-            self._db.set_admin_password_hash(auth.hash_password(new))
+            if not self._db.replace_admin_password(stored, auth.hash_password(new)):
+                raise DbError(
+                    "PASSWORD_CONFLICT", "密码刚被其他窗口修改，请重新打开设置窗口"
+                )
             logger.info("admin password changed")
-            return self._state()
+            return AuthState(configured=True, unlocked=True)
 
         return self._call("change_password", action, guard=True)
 
