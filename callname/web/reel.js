@@ -10,14 +10,12 @@
 const ABOVE = 26;   // 赢家上方假名数量
 const BELOW = 5;    // 赢家下方假名数量，保证静止时下半格不露白
 
-// 手动停模式：条带由「一个周期」重复多份组成，靠取模实现无缝循环。
-// 周期越短，能停下的赢家位置越密，减速等待越短；这里 9 格一组最顺手。
-const MANUAL_ABOVE = 6;
-const MANUAL_BELOW = 2;
-const MANUAL_PERIOD = MANUAL_ABOVE + 1 + MANUAL_BELOW;
-const MANUAL_REPEATS = 5;
+// 手动停模式：条带是一段假名周期重复多份，靠取模实现无缝循环。
+// 点「停」时只前进到最近的下一格（≤1 格），所以周期长度只要够覆盖
+// 「当前偏移 + 一个视口」即可。
+const MANUAL_PATTERN = 24;      // 一个周期的格数
+const MANUAL_REPEATS = 4;       // 周期重复份数，要覆盖停止时可能落到的下标
 const MANUAL_CELL_MS = 26;      // 匀速阶段每格耗时
-const DECEL_MIN_MS = 650;       // 减速最短时长；用速度连续的三次缓出，不会“急刹”
 
 /** @typedef {{ id: number, name: string, weight: number }} Winner */
 
@@ -43,14 +41,8 @@ export class Reel {
     this._speed = 0;
     this._cellH = 0;
     this._spinning = false;
-    this._stopping = false;
-    /** @type {HTMLElement[]} */
-    this._winnerCells = [];
-    /** @type {(() => void) | null} */
-    this._stopResolve = null;
-    /** @type {Promise<void> | null} */
-    this._stopPromise = null;
-    this._stopGen = 0;
+    /** @type {string | null} 手动停模式下待揭晓的赢家名字 */
+    this._pendingWinner = null;
   }
 
   /** 用名字数组构建条带，winIndex 位置是赢家（先不加高亮，由 reveal() 揭开）。 */
@@ -159,11 +151,11 @@ export class Reel {
     window.setTimeout(() => this.clip.classList.remove('is-kicking'), 140);
   }
 
-  /* ---------- 手动停模式：持续旋转 + 减速停止 ---------- */
+  /* ---------- 手动停模式：持续旋转 + 立即停格 ---------- */
 
   /**
-   * 开始持续旋转，赢家已由后端确定、但全程不点亮。
-   * 周期条带重复 4 份，靠取模换行；停止时再挑最近的一个赢家格落脚。
+   * 开始持续旋转。条带全部是假名，赢家名字只在点「停」的那一刻写进落点格，
+   * 所以转动过程中不会提前泄露结果。
    * @param {string[]} decoys 假名池
    * @param {Winner} winner 赢家
    * @returns {boolean} false = prefers-reduced-motion，已直接停稳点亮，调用方按普通模式收尾
@@ -171,48 +163,34 @@ export class Reel {
   startInfinite(decoys, winner) {
     this._cancelLoop();
     const pool = decoys.length ? decoys : [winner.name];
-    const pattern = [
-      ...this._pick(pool, MANUAL_ABOVE),
-      winner.name,
-      ...this._pick(pool, MANUAL_BELOW),
-    ];
-    const names = [];
-    /** @type {HTMLElement[]} */
-    const winnerCells = [];
-    for (let repeat = 0; repeat < MANUAL_REPEATS; repeat += 1) {
-      pattern.forEach((name, index) => {
-        const cell = document.createElement('div');
-        cell.className = 'cell';
-        cell.textContent = name;
-        if (index === MANUAL_ABOVE) winnerCells.push(cell);
-        names.push(cell);
-      });
-    }
+    const total = MANUAL_PATTERN * MANUAL_REPEATS;
     const frag = document.createDocumentFragment();
-    names.forEach((cell) => frag.appendChild(cell));
-    this.strip.replaceChildren(frag);
-    this._winnerCells = winnerCells;
-    this.winnerEl = winnerCells[0] ?? null;
-
-    if (this.reduced) {
-      this.strip.style.transition = 'none';
-      this.strip.style.transform = 'translate3d(0, 0, 0)';
-      void this.strip.offsetHeight;
-      this._settleCell(this.winnerEl);
-      this.reveal();
-      return false;
+    for (let index = 0; index < total; index += 1) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.textContent = pool[index % pool.length];
+      frag.appendChild(cell);
     }
-
-    const h = names[0].getBoundingClientRect().height;
-    this._cellH = h;
-    this._periodPx = MANUAL_PERIOD * h;
-    this._speed = h / MANUAL_CELL_MS;
+    this.strip.replaceChildren(frag);
+    this._pendingWinner = winner.name;
+    this.winnerEl = null;
     this._offset = 0;
-    this._lastTs = 0;
     this.strip.style.transition = 'none';
     this.strip.style.transform = 'translate3d(0, 0, 0)';
     void this.strip.offsetHeight;
 
+    // 必须从 strip 里取：replaceChildren 之后 fragment 已被清空
+    const first = this.strip.firstElementChild;
+    const h = first instanceof HTMLElement ? first.getBoundingClientRect().height : 0;
+    this._cellH = h;
+    this._periodPx = MANUAL_PATTERN * h;
+
+    if (this.reduced || h <= 0) {
+      this._landNext();
+      return false;
+    }
+
+    this._speed = h / MANUAL_CELL_MS;
     this._spinning = true;
     this._lastTs = 0;
     this._raf = requestAnimationFrame((ts) => this._tick(ts));
@@ -220,75 +198,40 @@ export class Reel {
   }
 
   /**
-   * 平滑减速停到最近的赢家格。
-   * 用三次缓出 (1-(1-p)^3)：起始速度是 3D/T，取 D = speed*T/3 就能让减速
-   * 从一开始正好接上匀速速度——没有顿挫，也不会像“急刹”。
+   * 立即停：不插播任何补间动画，直接落到当前偏移之后的最近一格并点亮结果。
+   * 「最近的一格」= 下一个格中心与高亮带中心对齐的位置，最多前进不到一格。
    */
-  async stopInfinite() {
-    // 已经在停就等它结束，别当成空操作（否则调用方的 await 会立刻返回）
-    if (this._stopping) return this._stopPromise;
-    if (!this._spinning || this._periodPx <= 0) return;
-    this._stopping = true;
-    const gen = ++this._stopGen;
-    const speed = this._speed;
-    const offset = this._offset;
-    const h = this._cellH;
-    const H = this.clip.clientHeight;
-    const period = this._periodPx;
+  stopInfinite() {
+    if (!this._spinning) return;
+    this._landNext();
+  }
 
-    // 第 m 个赢家格：目标偏移 = 格顶对齐高亮带中心所需位移 + m 个周期。
-    // cellTop = index*h - offset，令 cellTop + h/2 = H/2。
-    const base = MANUAL_ABOVE * h + h / 2 - H / 2;
-    const tail = Math.max(
-      (speed * DECEL_MIN_MS) / 3,   // 保证减速至少 DECEL_MIN_MS，初速才接得上
-      period * 0.5,                 // 还要跑够半圈，避免只挪一两格
-    );
-    let target = base;
-    while (target - offset < tail) target += period;
-
-    const distance = target - offset;
-    const duration = (3 * distance) / speed;
-    const index = Math.round((target - base) / period);
-    const winnerEl = this._winnerCells[index] ?? this.winnerEl;
-
-    // 停掉匀速循环，从当前偏移继续
+  /** @private 立刻停到下一格，把赢家名字写进那一格并点亮。 */
+  _landNext() {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
-
-    this._stopPromise = new Promise((resolve) => {
-      this._stopResolve = resolve;
-      const start = performance.now();
-      const step = (now) => {
-        const progress = Math.min((now - start) / duration, 1);
-        const eased = 1 - Math.pow(1 - progress, 3);
-        this.strip.style.transform = `translate3d(0, ${-(offset + distance * eased)}px, 0)`;
-        if (progress < 1) {
-          this._raf = requestAnimationFrame(step);
-          return;
-        }
-        this._raf = 0;
-        this._stopResolve = null;
-        resolve();
-      };
-      this._raf = requestAnimationFrame(step);
-    });
-    await this._stopPromise;
-
-    // 停止途中被 kick()/startInfinite() 打断时，别用旧目标去 settle 新条带
-    if (gen !== this._stopGen) return;
-    this._stopPromise = null;
-
-    this._offset = target % period;
-    this.winnerEl = winnerEl ?? null;
-    this._settleCell(this.winnerEl);
     this._spinning = false;
-    this._stopping = false;
+
+    const h = this._cellH;
+    const H = this.clip.clientHeight;
+    const cells = /** @type {HTMLElement[]} */ ([...this.strip.children]);
+    if (!h || cells.length === 0) return;
+
+    // 格 i 居中时需要的偏移 = i*h + h/2 - H/2；取比当前偏移大的最小 i。
+    const phase = h / 2 - H / 2;
+    const raw = Math.floor((this._offset - phase) / h) + 1;
+    const index = Math.max(0, Math.min(raw, cells.length - 1));
+
+    const cell = cells[index];
+    if (this._pendingWinner !== null) cell.textContent = this._pendingWinner;
+    this.winnerEl = cell;
+    this._settleCell(cell);
     this.reveal();
   }
 
   /** @private 匀速阶段：每帧推进 offset，取模换行（内容周期重复所以无缝）。 */
   _tick(ts) {
-    if (!this._spinning || this._stopping) return;
+    if (!this._spinning) return;
     // 窗口被遮挡时浏览器会把 rAF 降到 1Hz，夹住 dt 防止一帧跳过好几格
     const dt = this._lastTs ? Math.min(ts - this._lastTs, 64) : 16;
     this._lastTs = ts;
@@ -312,16 +255,6 @@ export class Reel {
     window.clearTimeout(this.timer);
     this.timer = null;
     this._spinning = false;
-    this._stopping = false;
-    this._stopGen += 1;   // 让仍在等待的 stopInfinite 知道自己被作废了
-    this._resumeStop();
-  }
-
-  /** @private 外部打断减速时，别让 stopInfinite 的 Promise 永远挂着。 */
-  _resumeStop() {
-    const resolve = this._stopResolve;
-    this._stopResolve = null;
-    if (resolve) resolve();
   }
 
   /** @private */

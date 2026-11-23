@@ -18,8 +18,7 @@ const IDLE_DECOY_POOL = ['点名', '准备开始', '点击开始'];
 
 /**
  * @typedef {{ status: any, busy: boolean, rosterVersion: number, idle: boolean,
- *             manual: boolean, spinning: boolean, stopping: boolean,
- *             starting: boolean }} State
+ *             manual: boolean, spinning: boolean, starting: boolean }} State
  */
 
 /** @type {State} */
@@ -30,7 +29,6 @@ const state = {
   idle: true,
   manual: false,
   spinning: false,
-  stopping: false,
   starting: false,
 };
 
@@ -91,14 +89,14 @@ function syncButton() {
   // 手动停模式下只要名单非空就保持可点：旋转中必须先能点「停」，
   // 名单被管理窗口清空时也要能停住转盘。
   const empty = state.status ? state.status.active === 0 : false;
-  const stopLabel = state.manual && (state.spinning || state.stopping || state.starting);
+  const stopLabel = state.manual && (state.spinning || state.starting);
   startLabel.textContent = stopLabel ? '停' : state.manual ? '开始' : '开始点名';
   startBtn.classList.toggle('is-stop', stopLabel);
   // starting 期间按钮短暂禁用：draw() 还没回来，此时点「停」没有可停的动画
-  startBtn.disabled = state.busy || state.stopping || state.starting
+  startBtn.disabled = state.busy || state.starting
     || (empty && !(state.manual && state.spinning));
-  resetBtn.disabled = state.busy || state.spinning || state.stopping || state.starting || empty;
-  modeBtn.disabled = state.busy || state.spinning || state.stopping || state.starting;
+  resetBtn.disabled = state.busy || state.spinning || state.starting || empty;
+  modeBtn.disabled = state.busy || state.spinning || state.starting;
 }
 
 /** 切换模式开关的视觉与状态；调用方负责持久化。 */
@@ -148,7 +146,7 @@ async function refreshStatus({ force = false, keepResult = false } = {}) {
     state.rosterVersion = status.roster_version;
     // 旋转中绝不能重画条带：paintIdle 会换内容并打断 rAF。
     // keepResult 用于「刚抽出结果」的刷新，别把刚点亮的赢家抹回待机画面。
-    if (!keepResult && !state.spinning && !state.stopping && !state.starting
+    if (!keepResult && !state.spinning && !state.starting
         && (state.idle || changed)) {
       paintIdle();
     }
@@ -227,16 +225,12 @@ async function startManual() {
   }
 }
 
-/** 手动停模式第二步：减速停到赢家上，再点亮。 */
+/** 手动停模式第二步：立即落到下一格并点亮结果（无补间动画）。 */
 async function stopManual() {
-  if (!state.spinning || state.stopping || state.starting) return;
-  state.stopping = true;
-  syncButton();
-  await reel.stopInfinite();
-  // 停止被派生操作（重置/重开）打断时，reel 已作废这次停止，不要抢着改状态
-  if (!state.stopping) return;
+  if (!state.spinning || state.starting) return;
+  // 同步落位：reel.stopInfinite 内部取消 rAF 并一次性摆好，不 await 任何动画
+  reel.stopInfinite();
   state.spinning = false;
-  state.stopping = false;
   showPendingAutoReset();
   syncButton();
   await refreshStatus({ force: true, keepResult: true }).catch(() => {});
@@ -260,13 +254,12 @@ async function doPrimary() {
 /** @returns {'draw' | 'start' | 'stop' | null} */
 function nextAction() {
   if (state.busy || state.starting) return null;
-  if (state.stopping) return null;
   if (!state.manual) return 'draw';
   return state.spinning ? 'stop' : 'start';
 }
 
 async function doReset() {
-  if (state.busy || state.spinning || state.stopping || state.starting) return;
+  if (state.busy || state.spinning || state.starting) return;
   state.busy = true;
   syncButton();
   try {
@@ -286,7 +279,7 @@ async function doReset() {
 }
 
 async function doToggleMode() {
-  if (state.busy || state.spinning || state.stopping || state.starting) return;
+  if (state.busy || state.spinning || state.starting) return;
   const next = !state.manual;
   applyMode(next);   // 乐观切换
   try {
@@ -341,15 +334,13 @@ async function boot() {
 // --auto 自测钩子（main.py --auto N 通过 evaluate_js 调用）
 window.clickStart = () => { void doPrimary(); };
 window.clickStop = () => {
-  if (state.manual && state.spinning && !state.stopping) void stopManual();
-};
-window.__state = () => ({
+  if (state.manual && state.spinning) void stopManual();
+};window.__state = () => ({
   busy: state.busy,
   idle: state.idle,
   manual: state.manual,
   starting: state.starting,
   spinning: state.spinning,
-  stopping: state.stopping,
   cycle: state.status ? state.status.cycle : null,
   remaining: state.status ? state.status.remaining : null,
   active: state.status ? state.status.active : null,
