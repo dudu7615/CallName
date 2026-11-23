@@ -6,20 +6,32 @@
  *   draw()   -> ApiResponse<DrawResult>
  *   reset()  -> ApiResponse<StatusResult>
  *   open_manage() -> ApiResponse<LaunchResult>
+ *   get_settings() -> ApiResponse<SettingsResult>
+ *   set_draw_mode(mode) -> ApiResponse<SettingsResult>
  */
 
 import { Reel } from './reel.js';
 
-const SPIN_MS = 4200;
+const SPIN_MS = 2600;
 const POLL_MS = 1500;
 const IDLE_DECOY_POOL = ['点名', '准备开始', '点击开始'];
 
-/** @type {{ status: any, busy: boolean, rosterVersion: number, idle: boolean }} */
+/**
+ * @typedef {{ status: any, busy: boolean, rosterVersion: number, idle: boolean,
+ *             manual: boolean, spinning: boolean, stopping: boolean,
+ *             starting: boolean }} State
+ */
+
+/** @type {State} */
 const state = {
   status: null,
   busy: false,
   rosterVersion: -1,
   idle: true,
+  manual: false,
+  spinning: false,
+  stopping: false,
+  starting: false,
 };
 
 const reel = new Reel(
@@ -28,6 +40,8 @@ const reel = new Reel(
 );
 
 const startBtn = /** @type {HTMLButtonElement} */ (document.getElementById('start'));
+const startLabel = /** @type {HTMLElement} */ (document.getElementById('start-label'));
+const modeBtn = /** @type {HTMLButtonElement} */ (document.getElementById('mode'));
 const resetBtn = /** @type {HTMLButtonElement} */ (document.getElementById('reset'));
 const manageBtn = /** @type {HTMLButtonElement} */ (document.getElementById('manage'));
 const hudCycle = /** @type {HTMLElement} */ (document.getElementById('hud-cycle'));
@@ -38,6 +52,9 @@ const hudTrack = /** @type {HTMLElement} */ (document.getElementById('hud-track'
 const toast = /** @type {HTMLElement} */ (document.getElementById('toast'));
 
 let toastTimer = 0;
+/** 手动停模式下「抽完自动进下一轮」的提示延后到停稳再弹，避免干扰转动。 */
+/** @type {number | null} */
+let pendingAutoReset = null;
 
 /** @param {string} message @param {number} [ms] @param {boolean} [isError] */
 function showToast(message, ms = 2600, isError = false) {
@@ -67,6 +84,32 @@ async function unwrap(promise) {
 }
 
 /**
+ * 主按钮的文案与禁用状态都从这里出：手动停模式下它同时是「开始」和「停」。
+ * 旋转期间不能禁用「停」，否则第二个点击落空。
+ */
+function syncButton() {
+  // 手动停模式下只要名单非空就保持可点：旋转中必须先能点「停」，
+  // 名单被管理窗口清空时也要能停住转盘。
+  const empty = state.status ? state.status.active === 0 : false;
+  const stopLabel = state.manual && (state.spinning || state.stopping || state.starting);
+  startLabel.textContent = stopLabel ? '停' : state.manual ? '开始' : '开始点名';
+  startBtn.classList.toggle('is-stop', stopLabel);
+  // starting 期间按钮短暂禁用：draw() 还没回来，此时点「停」没有可停的动画
+  startBtn.disabled = state.busy || state.stopping || state.starting
+    || (empty && !(state.manual && state.spinning));
+  resetBtn.disabled = state.busy || state.spinning || state.stopping || state.starting || empty;
+  modeBtn.disabled = state.busy || state.spinning || state.stopping || state.starting;
+}
+
+/** 切换模式开关的视觉与状态；调用方负责持久化。 */
+function applyMode(manual) {
+  state.manual = manual;
+  // 标签固定写设置名，开/关只看 aria-pressed 的点亮位置
+  modeBtn.setAttribute('aria-pressed', String(manual));
+  syncButton();
+}
+
+/**
  * @param {import('./main.js').StatusResult} status
  */
 function renderStatus(status) {
@@ -78,10 +121,8 @@ function renderStatus(status) {
   hudFill.style.width = `${Math.round(ratio * 100)}%`;
   hudTrack.setAttribute('aria-valuemax', String(status.active));
   hudTrack.setAttribute('aria-valuenow', String(status.drawn));
-  const empty = status.active === 0;
-  startBtn.disabled = empty || state.busy;
-  resetBtn.disabled = empty || state.busy;
-  if (empty) {
+  syncButton();
+  if (status.active === 0) {
     showToast('名单为空，点击右侧齿轮添加名字', 4000);
   }
 }
@@ -98,33 +139,85 @@ function paintIdle() {
   state.idle = true;
 }
 
-async function refreshStatus({ force = false } = {}) {
+async function refreshStatus({ force = false, keepResult = false } = {}) {
   if (state.busy) return;
   const status = await unwrap(window.pywebview.api.status());
   renderStatus(status);
   if (status.roster_version !== state.rosterVersion || force) {
     const changed = state.rosterVersion !== -1;
     state.rosterVersion = status.roster_version;
-    if (state.idle || changed) paintIdle();
+    // 旋转中绝不能重画条带：paintIdle 会换内容并打断 rAF。
+    // keepResult 用于「刚抽出结果」的刷新，别把刚点亮的赢家抹回待机画面。
+    if (!keepResult && !state.spinning && !state.stopping && !state.starting
+        && (state.idle || changed)) {
+      paintIdle();
+    }
   }
 }
 
+/** 自动停模式：点一次 → 抽签 + 定长动画。 */
 async function doDraw() {
   if (state.busy) return;
   state.busy = true;
-  startBtn.disabled = true;
-  resetBtn.disabled = true;
+  syncButton();
+  let settled = false;
   try {
     const result = await unwrap(window.pywebview.api.draw());
     state.idle = false;
     await reel.spin(result.decoys, { id: result.id, name: result.name, weight: result.weight }, SPIN_MS);
+    settled = true;
     if (result.auto_reset) {
       showToast(`本轮已抽完，已自动进入第 ${result.cycle} 轮`);
     }
     state.busy = false;
-    await refreshStatus();
+    syncButton();
+    await refreshStatus({ keepResult: true });
   } catch (error) {
     state.busy = false;
+    syncButton();
+    if (error instanceof ApiFailure && error.code === 'EMPTY_ROSTER') {
+      showToast(error.message, 4000, true);
+    } else if (settled) {
+      // 抽签本身成功了，只是收尾的状态刷新失败：别把已经点亮的名字抹掉
+      showToast(`状态刷新失败：${error instanceof Error ? error.message : String(error)}`, 4000, true);
+    } else {
+      showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000, true);
+    }
+    await refreshStatus({ force: true, keepResult: true }).catch(() => {});
+  }
+}
+
+/** 手动停模式第一步：抽签（先落库）并开始持续旋转。 */
+async function startManual() {
+  if (state.starting || state.spinning) return;
+  state.starting = true;   // 同步置位，防双击；busy 保持 false，轮询继续
+  pendingAutoReset = null;
+  syncButton();
+  try {
+    const result = await unwrap(window.pywebview.api.draw());
+    state.idle = false;
+    if (result.auto_reset) pendingAutoReset = result.cycle;
+    const animated = reel.startInfinite(
+      result.decoys,
+      { id: result.id, name: result.name, weight: result.weight },
+    );
+    if (!animated) {
+      // prefers-reduced-motion：直接停稳，按自动模式收尾
+      state.starting = false;
+      showPendingAutoReset();
+      syncButton();
+      await refreshStatus({ force: true, keepResult: true });
+      return;
+    }
+    state.starting = false;
+    state.spinning = true;
+    syncButton();
+    await refreshStatus({ force: true, keepResult: true }).catch(() => {});   // 立刻刷新 HUD
+  } catch (error) {
+    state.starting = false;
+    state.spinning = false;
+    pendingAutoReset = null;
+    syncButton();
     if (error instanceof ApiFailure && error.code === 'EMPTY_ROSTER') {
       showToast(error.message, 4000, true);
     } else {
@@ -134,11 +227,48 @@ async function doDraw() {
   }
 }
 
+/** 手动停模式第二步：减速停到赢家上，再点亮。 */
+async function stopManual() {
+  if (!state.spinning || state.stopping || state.starting) return;
+  state.stopping = true;
+  syncButton();
+  await reel.stopInfinite();
+  // 停止被派生操作（重置/重开）打断时，reel 已作废这次停止，不要抢着改状态
+  if (!state.stopping) return;
+  state.spinning = false;
+  state.stopping = false;
+  showPendingAutoReset();
+  syncButton();
+  await refreshStatus({ force: true, keepResult: true }).catch(() => {});
+}
+
+/** 手动停模式下「本轮已抽完」的提示延后到停稳再弹，免得干扰转动。 */
+function showPendingAutoReset() {
+  if (pendingAutoReset === null) return;
+  showToast(`本轮已抽完，已自动进入第 ${pendingAutoReset} 轮`);
+  pendingAutoReset = null;
+}
+
+/** 主按钮（以及空格/回车）的唯一入口，按模式分流。 */
+async function doPrimary() {
+  const action = nextAction();
+  if (action === 'start') await startManual();
+  else if (action === 'stop') await stopManual();
+  else if (action === 'draw') await doDraw();
+}
+
+/** @returns {'draw' | 'start' | 'stop' | null} */
+function nextAction() {
+  if (state.busy || state.starting) return null;
+  if (state.stopping) return null;
+  if (!state.manual) return 'draw';
+  return state.spinning ? 'stop' : 'start';
+}
+
 async function doReset() {
-  if (state.busy) return;
+  if (state.busy || state.spinning || state.stopping || state.starting) return;
   state.busy = true;
-  startBtn.disabled = true;
-  resetBtn.disabled = true;
+  syncButton();
   try {
     const status = await unwrap(window.pywebview.api.reset());
     state.busy = false;
@@ -149,8 +279,21 @@ async function doReset() {
     showToast('已重新开始一轮（累计次数保持不变）');
   } catch (error) {
     state.busy = false;
+    syncButton();
     showToast(`出错了：${error instanceof Error ? error.message : String(error)}`, 4000, true);
     await refreshStatus({ force: true }).catch(() => {});
+  }
+}
+
+async function doToggleMode() {
+  if (state.busy || state.spinning || state.stopping || state.starting) return;
+  const next = !state.manual;
+  applyMode(next);   // 乐观切换
+  try {
+    await unwrap(window.pywebview.api.set_draw_mode(next ? 'manual' : 'auto'));
+  } catch (error) {
+    applyMode(!next);
+    showToast(`无法保存模式设置：${error instanceof Error ? error.message : String(error)}`, 4000, true);
   }
 }
 
@@ -163,14 +306,15 @@ async function doOpenManage() {
 }
 
 function bindEvents() {
-  startBtn.addEventListener('click', () => { void doDraw(); });
+  startBtn.addEventListener('click', () => { void doPrimary(); });
+  modeBtn.addEventListener('click', () => { void doToggleMode(); });
   resetBtn.addEventListener('click', () => { void doReset(); });
   manageBtn.addEventListener('click', () => { void doOpenManage(); });
   document.addEventListener('keydown', (event) => {
     if (event.repeat) return;
     if (event.code === 'Space' || event.code === 'Enter') {
       event.preventDefault();
-      void doDraw();
+      void doPrimary();
     }
   });
   window.setInterval(() => {
@@ -185,13 +329,27 @@ async function boot() {
   } catch (error) {
     showToast(`初始化失败：${error instanceof Error ? error.message : String(error)}`, 4000, true);
   }
+  try {
+    const settings = await unwrap(window.pywebview.api.get_settings());
+    applyMode(settings.draw_mode === 'manual');
+  } catch (error) {
+    applyMode(false);
+    showToast(`读取设置失败：${error instanceof Error ? error.message : String(error)}`, 4000, true);
+  }
 }
 
 // --auto 自测钩子（main.py --auto N 通过 evaluate_js 调用）
-window.clickStart = () => { void doDraw(); };
+window.clickStart = () => { void doPrimary(); };
+window.clickStop = () => {
+  if (state.manual && state.spinning && !state.stopping) void stopManual();
+};
 window.__state = () => ({
   busy: state.busy,
   idle: state.idle,
+  manual: state.manual,
+  starting: state.starting,
+  spinning: state.spinning,
+  stopping: state.stopping,
   cycle: state.status ? state.status.cycle : null,
   remaining: state.status ? state.status.remaining : null,
   active: state.status ? state.status.active : null,

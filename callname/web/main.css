@@ -206,6 +206,8 @@
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  justify-content: center;   /* 开始点名 / 开始 / 停 切换时文字居中 */
+  min-width: 186px;
   font-size: 19px;
   padding: 14px 26px 14px 30px;
 }
@@ -213,6 +215,46 @@
   border-color: rgba(35, 24, 10, .22);
   background: rgba(35, 24, 10, .09);
   color: rgba(35, 24, 10, .62);
+}
+/* 手动停模式下「停」用危险色，和「开始」的金色一眼分开 */
+.btn-primary.is-stop {
+  background: linear-gradient(180deg, #ff9a8d, var(--danger));
+  box-shadow: 0 8px 26px rgba(255, 122, 107, .24), inset 0 1px 0 rgba(255, 255, 255, .42);
+}
+.btn-primary.is-stop:hover:not(:disabled) {
+  box-shadow: 0 10px 32px rgba(255, 122, 107, .36), inset 0 1px 0 rgba(255, 255, 255, .5);
+}
+
+/* 模式开关：沿用名单管理窗口 .toggle 的视觉语言（轨道 + 滑点），
+   但那是为表格行调的小尺寸，不能直接搬过来，所以这里单独定义。 */
+.mode-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+.mode-switch::before {
+  content: "";
+  width: 30px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--pill);
+  background:
+    radial-gradient(circle at 8px 50%, var(--ink-dim) 3.6px, transparent 4px),
+    rgba(150, 183, 222, .16);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, .5);
+  transition: background-color .18s ease;
+}
+.mode-switch[aria-pressed="true"] {
+  color: var(--gold);
+  border-color: var(--gold-line);
+  background: var(--gold-soft);
+}
+.mode-switch[aria-pressed="true"]::before {
+  background:
+    radial-gradient(circle at 22px 50%, #23180a 3.6px, transparent 4px),
+    linear-gradient(90deg, var(--gold), var(--gold-bright));
+  box-shadow: 0 0 10px rgba(255, 194, 75, .45), inset 0 1px 1px rgba(255, 255, 255, .5);
 }
 
 .toast {
@@ -240,4 +282,5 @@
   .clip.is-kicking, .cell.win.pop { animation: none; }
   .cell, .cell.win { transition: none; }
   .hud-fill { transition: none; }
+  .mode-switch::before { transition: none; }
 }

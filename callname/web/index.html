@@ -43,9 +43,11 @@
 
     <footer class="controls">
       <button id="start" class="btn btn-primary" type="button">
-        <span>开始点名</span>
+        <span id="start-label">开始点名</span>
         <kbd>空格</kbd>
       </button>
+      <button id="mode" class="btn btn-ghost mode-switch" type="button" aria-pressed="false"
+              title="手动停：点「开始」持续旋转，再点「停」才停">手动停</button>
       <button id="reset" class="btn btn-ghost" type="button"
               title="重新开始一轮（不清空累计次数）">重置列表</button>
       <button id="manage" class="btn btn-icon" type="button" title="名单管理" aria-label="名单管理">
