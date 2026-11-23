@@ -16,8 +16,8 @@ const MANUAL_ABOVE = 6;
 const MANUAL_BELOW = 2;
 const MANUAL_PERIOD = MANUAL_ABOVE + 1 + MANUAL_BELOW;
 const MANUAL_REPEATS = 5;
-const MANUAL_CELL_MS = 34;      // 匀速阶段每格耗时
-const STOP_SNAP_MS = 170;       // 点「停」后滑到下一个赢家格的时长：要“立刻停住”
+const MANUAL_CELL_MS = 26;      // 匀速阶段每格耗时
+const DECEL_MIN_MS = 650;       // 减速最短时长；用速度连续的三次缓出，不会“急刹”
 
 /** @typedef {{ id: number, name: string, weight: number }} Winner */
 
@@ -220,8 +220,9 @@ export class Reel {
   }
 
   /**
-   * 立即刹住，只滑到**下一个**赢家格（最多一个周期）。
-   * 不做长减速：老师点「停」就是当下要结果，多转一秒都是干扰。
+   * 平滑减速停到最近的赢家格。
+   * 用三次缓出 (1-(1-p)^3)：起始速度是 3D/T，取 D = speed*T/3 就能让减速
+   * 从一开始正好接上匀速速度——没有顿挫，也不会像“急刹”。
    */
   async stopInfinite() {
     // 已经在停就等它结束，别当成空操作（否则调用方的 await 会立刻返回）
@@ -229,6 +230,7 @@ export class Reel {
     if (!this._spinning || this._periodPx <= 0) return;
     this._stopping = true;
     const gen = ++this._stopGen;
+    const speed = this._speed;
     const offset = this._offset;
     const h = this._cellH;
     const H = this.clip.clientHeight;
@@ -237,16 +239,19 @@ export class Reel {
     // 第 m 个赢家格：目标偏移 = 格顶对齐高亮带中心所需位移 + m 个周期。
     // cellTop = index*h - offset，令 cellTop + h/2 = H/2。
     const base = MANUAL_ABOVE * h + h / 2 - H / 2;
-    // 取当前偏移之后最近的那一个赢家格；正好停在格上时再前进一格，
-    // 保证「点停」总有一次可见的位移，而不是像卡住。
-    let target = base + Math.ceil((offset - base) / period) * period;
-    if (target - offset < h * 0.5) target += period;
+    const tail = Math.max(
+      (speed * DECEL_MIN_MS) / 3,   // 保证减速至少 DECEL_MIN_MS，初速才接得上
+      period * 0.5,                 // 还要跑够半圈，避免只挪一两格
+    );
+    let target = base;
+    while (target - offset < tail) target += period;
 
     const distance = target - offset;
+    const duration = (3 * distance) / speed;
     const index = Math.round((target - base) / period);
     const winnerEl = this._winnerCells[index] ?? this.winnerEl;
 
-    // 立刻停掉匀速循环
+    // 停掉匀速循环，从当前偏移继续
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
 
@@ -254,7 +259,7 @@ export class Reel {
       this._stopResolve = resolve;
       const start = performance.now();
       const step = (now) => {
-        const progress = Math.min((now - start) / STOP_SNAP_MS, 1);
+        const progress = Math.min((now - start) / duration, 1);
         const eased = 1 - Math.pow(1 - progress, 3);
         this.strip.style.transform = `translate3d(0, ${-(offset + distance * eased)}px, 0)`;
         if (progress < 1) {

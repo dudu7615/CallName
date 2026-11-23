@@ -86,8 +86,8 @@ def _start_auto(window: webview.Window, count: int) -> None:
             window.evaluate_js("window.clickStart && window.clickStart()")
             time.sleep(0.7)   # 让手动停模式真的转起来再停
             window.evaluate_js("window.clickStop && window.clickStop()")
-            # 自动模式 2.6s 自停；手动模式 0.7s 旋转 + 0.17s 急停到下一格
-            time.sleep(3.0)
+            # 自动模式 3.0s 自停；手动模式 0.7s 旋转 + 约 0.7-1.6s 平滑减速
+            time.sleep(3.6)
         state = window.evaluate_js("window.__state ? window.__state() : null")
         logger.info("auto final state: {}", state)
 
