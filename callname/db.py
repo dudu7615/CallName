@@ -25,6 +25,7 @@ from callname.schemas import (
     AddPersonResult,
     ClearCountsResult,
     DeleteManyResult,
+    DrawMode,
     ImportMode,
     ImportResult,
     PersonItem,
@@ -35,6 +36,7 @@ from callname.schemas import (
 META_ROSTER_VERSION = "roster_version"
 META_CYCLE = "cycle"
 META_ADMIN_PASSWORD = "admin_password"
+META_DRAW_MODE = "draw_mode"
 
 
 class DbError(Exception):
@@ -212,6 +214,18 @@ class Database:
             else:
                 row.value = value
                 session.add(row)
+
+    def get_draw_mode(self) -> DrawMode:
+        """手工改库写进脏值时回落到默认模式，不抛异常打断启动。"""
+        raw = self.get_meta(META_DRAW_MODE, DrawMode.AUTO.value)
+        try:
+            return DrawMode(raw)
+        except ValueError:
+            logger.warning("invalid draw_mode in meta: {!r}, fallback to auto", raw)
+            return DrawMode.AUTO
+
+    def set_draw_mode(self, mode: DrawMode) -> None:
+        self.set_meta(META_DRAW_MODE, mode.value)
 
     def get_cycle(self) -> int:
         return int(self.get_meta(META_CYCLE, "1"))

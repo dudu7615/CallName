@@ -73,15 +73,21 @@ def _prepare_environment() -> None:
 
 
 def _start_auto(window: webview.Window, count: int) -> None:
-    """--auto N：等页面加载完后用 evaluate_js 触发按钮，避免模拟鼠标。"""
+    """--auto N：等页面加载完后用 evaluate_js 触发按钮，避免模拟鼠标。
+
+    两种模式共用一条路径：先「点开始」让转盘转起来，再「点停」。
+    自动模式下 clickStop 是空操作，转盘按 SPIN_MS 自己停。
+    """
 
     def run() -> None:
         time.sleep(1.5)
         for index in range(count):
             logger.info("auto draw {}/{}", index + 1, count)
             window.evaluate_js("window.clickStart && window.clickStart()")
-            # 必须长于前端 SPIN_MS（4200ms）+ 停稳点亮的余量
-            time.sleep(5.0)
+            time.sleep(0.7)   # 让手动停模式真的转起来再停
+            window.evaluate_js("window.clickStop && window.clickStop()")
+            # 自动模式 3.0s 自停；手动模式 0.7s 旋转 + 瞬时落格
+            time.sleep(3.1)
         state = window.evaluate_js("window.__state ? window.__state() : null")
         logger.info("auto final state: {}", state)
 
