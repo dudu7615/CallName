@@ -62,10 +62,13 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
 - **权重 = 优先级**（Plackett–Luce 无放回抽样）。不要改成频率加权——那会破坏
   「每人每轮恰好一次」。UI 文案必须写清这一点。
 - **手动停模式**（`draw_mode=manual`，存 `meta`）：主按钮第一下抽签并启动 rAF
-  匀速循环，第二下平滑减速停住。条带是「一个周期（`MANUAL_PERIOD` 格）重复
-  `MANUAL_REPEATS` 份」，靠 `offset % periodPx` 无缝换行；减速用三次缓出，
-  行程取 `speed * DECEL_MIN_MS / 3` 使**起始速度与匀速完全相等**——这是不顿挫的
-  关键，改速度或时长时要一起改。几何仍由 `_restY()` 实测，不要写死像素。
+  匀速循环，第二下**瞬时落格**——不播补间动画、不 await，变量是 `spinning`。
+  条带是假名池循环填充 `MANUAL_PATTERN * MANUAL_REPEATS` 格，赢家名字**不在条带里**，
+  只在点停时写进落点格（否则转动中会泄露结果）。落点 = 严格大于当前偏移的
+  最小居中位置，最多前进 1 格，所以「点停→出结果」在同一帧完成。
+  改这块时注意：`strip.replaceChildren(frag)` 会清空 fragment，量格高必须从
+  `strip.firstElementChild` 取，否则格高为 0、转盘根本不动（踩过一次）。
+  几何仍由 `_restY()` 实测，不要写死像素。
 - **本轮已抽集合只在内存里**（`DrawSession._drawn`），不持久化；`draw_count` 才持久化。
   这是两个不同概念，文案不要混。
 - **设置窗口的锁是后端强制的**：`ManageApi` 未解锁时所有业务方法都返回 `LOCKED`。
