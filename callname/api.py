@@ -19,10 +19,12 @@ from callname.schemas import (
     ApiResponse,
     AuthState,
     DeleteOneResult,
+    DrawMode,
     FilePickResult,
     ImportMode,
     LaunchResult,
     PersonPatch,
+    SettingsResult,
     fail,
     ok,
 )
@@ -74,6 +76,25 @@ class MainApi:
         except Exception as exc:  # pragma: no cover
             logger.exception("reset failed")
             return _dump(fail("INTERNAL", f"重置失败：{exc}"))
+
+    def get_settings(self) -> dict[str, object]:
+        try:
+            return _dump(ok(SettingsResult(draw_mode=self._db.get_draw_mode())))
+        except Exception as exc:  # pragma: no cover
+            logger.exception("get_settings failed")
+            return _dump(fail("INTERNAL", f"读取设置失败：{exc}"))
+
+    def set_draw_mode(self, mode: str) -> dict[str, object]:
+        try:
+            parsed = DrawMode(mode)
+        except ValueError:
+            return _dump(fail("BAD_MODE", "抽签模式只能是 auto 或 manual"))
+        try:
+            self._db.set_draw_mode(parsed)
+        except Exception as exc:  # pragma: no cover
+            logger.exception("set_draw_mode failed")
+            return _dump(fail("INTERNAL", f"保存设置失败：{exc}"))
+        return _dump(ok(SettingsResult(draw_mode=parsed)))
 
     def open_manage(self) -> dict[str, object]:
         try:

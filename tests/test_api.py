@@ -43,6 +43,21 @@ def test_main_empty_roster_envelope(db: Database) -> None:
     assert payload["error"]["code"] == "EMPTY_ROSTER"  # type: ignore[index]
 
 
+def test_main_settings_roundtrip(db: Database) -> None:
+    api = MainApi(session=DrawSession(db), db=db)
+    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "auto"}
+
+    saved = _assert_json(api.set_draw_mode("manual"))
+    assert saved["ok"] is True
+    assert saved["data"] == {"draw_mode": "manual"}
+    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "manual"}
+
+    bad = _assert_json(api.set_draw_mode("sometimes"))
+    assert bad["ok"] is False
+    assert bad["error"]["code"] == "BAD_MODE"  # type: ignore[index]
+    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "manual"}
+
+
 def test_manage_crud_envelopes(manage_api: ManageApi) -> None:
     api = manage_api
 

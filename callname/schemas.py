@@ -62,6 +62,19 @@ class DrawResult(BaseModel):
     roster_version: int = Field(description="名单版本号")
 
 
+class DrawMode(StrEnum):
+    """抽签交互模式。"""
+
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+class SettingsResult(BaseModel):
+    """主窗口可持久化的设置（存在 meta 表，重启后保持）。"""
+
+    draw_mode: DrawMode = Field(description="auto = 点一次自动停；manual = 点开始持续转、点停才停")
+
+
 class PersonItem(BaseModel):
     """管理窗口的一行。"""
 

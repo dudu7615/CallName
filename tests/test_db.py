@@ -10,7 +10,7 @@ from sqlmodel import select
 
 from callname.db import META_ADMIN_PASSWORD, Database, DbError
 from callname.models import DrawLog, Meta, Person
-from callname.schemas import ImportMode, PersonPatch
+from callname.schemas import DrawMode, ImportMode, PersonPatch
 
 
 def test_migrate_is_idempotent(tmp_path: Path) -> None:
@@ -178,6 +178,14 @@ def test_meta_cycle(db: Database) -> None:
     assert db.bump_cycle() == 2
     assert db.bump_cycle() == 3
     assert db.get_cycle() == 3
+
+
+def test_draw_mode_roundtrip_and_dirty_value(db: Database) -> None:
+    assert db.get_draw_mode() is DrawMode.AUTO
+    db.set_draw_mode(DrawMode.MANUAL)
+    assert db.get_draw_mode() is DrawMode.MANUAL
+    db.set_meta("draw_mode", "nonsense")
+    assert db.get_draw_mode() is DrawMode.AUTO, "手改库的脏值不能让启动失败"
 
 
 def test_zero_weight_blocked_by_check_constraint(db: Database) -> None:
