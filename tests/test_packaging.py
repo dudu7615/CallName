@@ -108,3 +108,20 @@ def test_installer_names_match_release_workflow() -> None:
     assert 'f"CallName-Setup-{version}.exe"' in workflow
     assert 'f"CallName-portable-{version}.zip"' in workflow
     assert "dist\\CallName\\*" in workflow
+
+
+def test_audio_assets_exist_and_are_smoke_checked() -> None:
+    """音效缺失不会让构建失败，只会让课堂静音，所以要单独钉住。
+
+    spec 是整目录收集 `callname/web`、setup.iss 递归拷贝，文件删掉也不会
+    报错；release.yml 的冒烟清单是白名单，不在这里断言就等于没人检查。
+    """
+    web = ROOT / "callname" / "web"
+    for name in ("tick.ogg", "finish.ogg", "Kenney-Audio-LICENSE.txt"):
+        path = web / name
+        assert path.is_file(), f"{name} 缺失"
+        assert path.stat().st_size > 0, f"{name} 是空文件"
+
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    for name in ("tick.ogg", "finish.ogg", "Kenney-Audio-LICENSE.txt"):
+        assert f"$web\\{name}" in workflow, f"{name} 不在打包冒烟清单里"

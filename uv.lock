@@ -153,7 +153,7 @@ wheels = [
 
 [[package]]
 name = "callname"
-version = "2.3.0"
+version = "2.4.0"
 source = { virtual = "." }
 dependencies = [
     { name = "argon2-cffi" },
