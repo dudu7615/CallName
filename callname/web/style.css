@@ -126,6 +126,8 @@ html, body {
   border-color: var(--gold-line);
   background: var(--gold-soft);
 }
+/* 扬声器关掉时压暗，与「手动停」的 aria-pressed 语汇一致 */
+.btn-icon.is-off { color: var(--ink-dim); }
 
 .btn-danger {
   border-color: rgba(255, 122, 107, .38);

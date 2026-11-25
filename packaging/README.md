@@ -30,7 +30,7 @@ dist/CallName/
     CallName.exe
     _internal/
         callname/
-            web/       # 前端：HTML/CSS/JS + MapleMono 字体 + OFL.txt
+            web/       # 前端：HTML/CSS/JS + MapleMono 字体 + 音效（各带许可证）
         icon.ico       # 窗口图标（Windows 走 System.Drawing.Icon，只认 ico）
         base_library.zip / *.pyd ...
 ```

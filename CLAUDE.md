@@ -69,6 +69,15 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
   改这块时注意：`strip.replaceChildren(frag)` 会清空 fragment，量格高必须从
   `strip.firstElementChild` 取，否则格高为 0、转盘根本不动（踩过一次）。
   几何仍由 `_restY()` 实测，不要写死像素。
+- **音效挂在 Reel 的 `onTick` / `onFinish` 回调上**（`web/sfx.js`，Web Audio）。
+  自动模式是**一次 CSS transition，没有逐帧代码**，跨格靠 `spin()` 里另起的 rAF
+  探针：每帧读 `getComputedStyle(strip).transform` 的 `m42`。过渡期间
+  `strip.style.transform` 返回的是**目标值**，拿它算格数只会得到「一次跨完」。
+  手动模式 `_offset` 会对 `_periodPx` 取模归零，跨格计数必须用不取模的 `_travel`。
+  手动模式约 38 格/秒，按 `MANUAL_TICK_EVERY = 3` 抽稀，逐格播会糊成噪声。
+  `--auto` 的 `evaluate_js` 点击不是可信手势，**音频必然静默**，这是预期；
+  核对回调是否跑到请看 `__state()` 的 `ticks` / `finishes`（原始次数）与
+  `ticks_played` / `finishes_played`（真正发声次数）。
 - **本轮已抽集合只在内存里**（`DrawSession._drawn`），不持久化；`draw_count` 才持久化。
   这是两个不同概念，文案不要混。
 - **设置窗口的锁是后端强制的**：`ManageApi` 未解锁时所有业务方法都返回 `LOCKED`。
@@ -94,7 +103,10 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
 - **`pywebview` 在 Windows 运行期才 import `platforms.winforms`**，spec 里必须显式
   `hiddenimports`；`webview.platforms.qt` 不能列，Windows 产物里不该有 Qt。
 - **字体随包分发**：`web/MapleMono-NF-CN-Regular.ttf`（OFL 1.1，许可证 `web/OFL.txt`）。
-  只有 Regular 一个字重，`font-weight: 700` 不会真的加粗——强调用颜色、
+- **音效随包分发**：`web/tick.ogg` / `web/finish.ogg` 来自 Kenney Interface Sounds 1.0
+  （CC0 1.0，出处与 sha256 见 `web/Kenney-Audio-LICENSE.txt`）。静音开关存
+  `meta.sound_enabled`，缺省为开；它只是课堂便利，不是权限系统。
+- **字体只有 Regular 一个字重**：`font-weight: 700` 不会真的加粗——强调用颜色、
   `text-shadow` 或 `-webkit-text-stroke`。改 `--item` 时不要给 `.cell` 加 padding/border：
   `reel.js` 的 `_restY` 按单元格实测高度定位，高度被撑开会让赢家偏离高亮带。
 
@@ -102,7 +114,7 @@ uv sync --group build && uv run pyinstaller packaging/main.spec   # 打包（仅
 
 - `callname.db` 在程序目录旁，已被 `.gitignore` 忽略，不要提交。
 - 表：`person`（权重 / 累计次数 / 启用）、`draw_log`（审计）、
-  `meta`（`roster_version` / `cycle` / `admin_password`）。
+  `meta`（`roster_version` / `cycle` / `admin_password` / `draw_mode` / `sound_enabled`）。
 - 迁移：`PRAGMA user_version` + `MIGRATIONS` 列表；加迁移时追加函数并递增版本号。
 
 ## 测试与验收

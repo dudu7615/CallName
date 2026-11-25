@@ -91,13 +91,25 @@ uv run main.py --auto 3                       # 自测：自动连抽 3 次
 | `callname/import_service.py` | 导入预览与落库编排 |
 | `callname/api.py` | pywebview 的 js_api 桥 |
 | `callname/app.py` | 启动参数与窗口 |
-| `callname/web/` | 前端（原生 HTML/CSS/JS，无构建步骤；内置 Maple Mono 字体，见 `callname/web/OFL.txt`） |
+| `callname/web/` | 前端（原生 HTML/CSS/JS，无构建步骤；内置 Maple Mono 字体与转盘音效，见各自许可证文件） |
 
 ## 界面字体
 
 界面使用随包分发的 **Maple Mono NF CN**（`callname/web/MapleMono-NF-CN-Regular.ttf`），
 采用 SIL Open Font License 1.1，许可证全文见 `callname/web/OFL.txt`。
 字体文件是原样分发的，未做子集化或改名。
+
+## 转盘音效
+
+转盘每跨过一格响一记短促的 tick，停稳点亮结果时响一声提示音。
+两者来自 Kenney 的 **Interface Sounds 1.0** 音效包（CC0 1.0），原样分发为
+`callname/web/tick.ogg`（23 ms）与 `callname/web/finish.ogg`（290 ms），
+出处、原始文件名与 sha256 见 `callname/web/Kenney-Audio-LICENSE.txt`。
+
+- 手动停模式转速约 38 格/秒，逐格播放会糊成连续噪声，因此每 3 格抽稀一次（约 13 次/秒）。
+- 主窗口右下角的喇叭按钮可以静音，状态存在数据库 `meta` 里，重启后保持。
+- `--auto` 自测是程序化点击，不算可信用户手势，浏览器会拒绝启动音频，**无声属预期**。
+  自测时看 `window.__state()` 里的 `ticks_played` / `finishes_played` 即可确认回调有跑到。
 
 ## 打包与发布
 

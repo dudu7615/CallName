@@ -188,6 +188,18 @@ def test_draw_mode_roundtrip_and_dirty_value(db: Database) -> None:
     assert db.get_draw_mode() is DrawMode.AUTO, "手改库的脏值不能让启动失败"
 
 
+def test_sound_enabled_roundtrip_and_dirty_value(db: Database) -> None:
+    """默认开；手改库写入认不出的值也不能让启动失败。"""
+    assert db.get_sound_enabled() is True
+    db.set_sound_enabled(False)
+    assert db.get_sound_enabled() is False
+    db.set_sound_enabled(True)
+    assert db.get_sound_enabled() is True
+
+    db.set_meta("sound_enabled", "maybe")
+    assert db.get_sound_enabled() is True
+
+
 def test_zero_weight_blocked_by_check_constraint(db: Database) -> None:
     """CheckConstraint 在数据库层面兜底，绕过 ORM 也写不进 0 权重。
 

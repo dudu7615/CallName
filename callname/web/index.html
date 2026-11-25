@@ -50,6 +50,22 @@
               title="手动停：点「开始」持续旋转，再点「停」才停">手动停</button>
       <button id="reset" class="btn btn-ghost" type="button"
               title="重新开始一轮（不清空累计次数）">重置列表</button>
+      <button id="sound" class="btn btn-icon" type="button" aria-pressed="true"
+              title="音效：开（点击静音）" aria-label="音效">
+        <svg id="sound-on" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z" />
+          <path d="M15.6 9.2a4 4 0 0 1 0 5.6" />
+          <path d="M18.2 6.6a7.6 7.6 0 0 1 0 10.8" />
+        </svg>
+        <svg id="sound-off" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"
+             style="display: none">
+          <path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4z" />
+          <path d="M16 9.8l4.4 4.4" />
+          <path d="M20.4 9.8L16 14.2" />
+        </svg>
+      </button>
       <button id="manage" class="btn btn-icon" type="button" title="名单管理" aria-label="名单管理">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
              stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

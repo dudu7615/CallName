@@ -73,6 +73,7 @@ class SettingsResult(BaseModel):
     """主窗口可持久化的设置（存在 meta 表，重启后保持）。"""
 
     draw_mode: DrawMode = Field(description="auto = 点一次自动停；manual = 点开始持续转、点停才停")
+    sound_enabled: bool = Field(default=True, description="转盘音效开关，存在 meta 表")
 
 
 class PersonItem(BaseModel):

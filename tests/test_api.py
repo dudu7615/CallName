@@ -45,17 +45,53 @@ def test_main_empty_roster_envelope(db: Database) -> None:
 
 def test_main_settings_roundtrip(db: Database) -> None:
     api = MainApi(session=DrawSession(db), db=db)
-    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "auto"}
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "auto",
+        "sound_enabled": True,
+    }
 
     saved = _assert_json(api.set_draw_mode("manual"))
     assert saved["ok"] is True
-    assert saved["data"] == {"draw_mode": "manual"}
-    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "manual"}
+    assert saved["data"] == {"draw_mode": "manual", "sound_enabled": True}
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "manual",
+        "sound_enabled": True,
+    }
 
     bad = _assert_json(api.set_draw_mode("sometimes"))
     assert bad["ok"] is False
     assert bad["error"]["code"] == "BAD_MODE"  # type: ignore[index]
-    assert _assert_json(api.get_settings())["data"] == {"draw_mode": "manual"}
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "manual",
+        "sound_enabled": True,
+    }
+
+
+def test_main_sound_toggle_roundtrip(db: Database) -> None:
+    """静音开关与 draw_mode 一样走 meta 表，setter 要回完整设置快照。"""
+    api = MainApi(session=DrawSession(db), db=db)
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "auto",
+        "sound_enabled": True,
+    }
+
+    muted = _assert_json(api.set_sound_enabled(False))
+    assert muted["ok"] is True
+    assert muted["data"] == {"draw_mode": "auto", "sound_enabled": False}
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "auto",
+        "sound_enabled": False,
+    }
+
+    # 切模式不能把静音状态带回去
+    _assert_json(api.set_draw_mode("manual"))
+    assert _assert_json(api.get_settings())["data"] == {
+        "draw_mode": "manual",
+        "sound_enabled": False,
+    }
+
+    unmuted = _assert_json(api.set_sound_enabled(True))
+    assert unmuted["data"] == {"draw_mode": "manual", "sound_enabled": True}
 
 
 def test_manage_crud_envelopes(manage_api: ManageApi) -> None:

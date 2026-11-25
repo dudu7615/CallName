@@ -116,6 +116,7 @@ jobs:
           $required = @(
             "$web\index.html", "$web\manage.html",
             "$web\MapleMono-NF-CN-Regular.ttf", "$web\OFL.txt",
+            "$web\tick.ogg", "$web\finish.ogg", "$web\Kenney-Audio-LICENSE.txt",
             "dist\CallName\_internal\icon.png",
             "dist\CallName\CallName.exe"
           )
