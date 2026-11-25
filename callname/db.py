@@ -37,6 +37,7 @@ META_ROSTER_VERSION = "roster_version"
 META_CYCLE = "cycle"
 META_ADMIN_PASSWORD = "admin_password"
 META_DRAW_MODE = "draw_mode"
+META_SOUND_ENABLED = "sound_enabled"
 
 
 class DbError(Exception):
@@ -226,6 +227,19 @@ class Database:
 
     def set_draw_mode(self, mode: DrawMode) -> None:
         self.set_meta(META_DRAW_MODE, mode.value)
+
+    def get_sound_enabled(self) -> bool:
+        """与 draw_mode 一样容忍手改库：认不出的值回落到「开」。"""
+        raw = self.get_meta(META_SOUND_ENABLED, "1")
+        if raw == "1":
+            return True
+        if raw == "0":
+            return False
+        logger.warning("invalid sound_enabled in meta: {!r}, fallback to on", raw)
+        return True
+
+    def set_sound_enabled(self, enabled: bool) -> None:
+        self.set_meta(META_SOUND_ENABLED, "1" if enabled else "0")
 
     def get_cycle(self) -> int:
         return int(self.get_meta(META_CYCLE, "1"))

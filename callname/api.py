@@ -79,7 +79,7 @@ class MainApi:
 
     def get_settings(self) -> dict[str, object]:
         try:
-            return _dump(ok(SettingsResult(draw_mode=self._db.get_draw_mode())))
+            return _dump(ok(self._settings()))
         except Exception as exc:  # pragma: no cover
             logger.exception("get_settings failed")
             return _dump(fail("INTERNAL", f"读取设置失败：{exc}"))
@@ -94,7 +94,22 @@ class MainApi:
         except Exception as exc:  # pragma: no cover
             logger.exception("set_draw_mode failed")
             return _dump(fail("INTERNAL", f"保存设置失败：{exc}"))
-        return _dump(ok(SettingsResult(draw_mode=parsed)))
+        return _dump(ok(self._settings()))
+
+    def set_sound_enabled(self, enabled: bool) -> dict[str, object]:
+        try:
+            self._db.set_sound_enabled(enabled)
+        except Exception as exc:  # pragma: no cover
+            logger.exception("set_sound_enabled failed")
+            return _dump(fail("INTERNAL", f"保存设置失败：{exc}"))
+        return _dump(ok(self._settings()))
+
+    def _settings(self) -> SettingsResult:
+        """两个 setter 都回完整快照，前端不用再猜另一个字段的值。"""
+        return SettingsResult(
+            draw_mode=self._db.get_draw_mode(),
+            sound_enabled=self._db.get_sound_enabled(),
+        )
 
     def open_manage(self) -> dict[str, object]:
         try:
