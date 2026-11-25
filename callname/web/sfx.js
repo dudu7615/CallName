@@ -26,6 +26,9 @@ const RESUME_TIMEOUT_MS = 400;
 /** 解码连续失败几次后彻底放弃：确定性失败不值得每次抽签都重试一遍。 */
 const MAX_FAILURES = 2;
 
+/** 没拿到手势时的重试间隔（ms）：否则每次点击都会建一个被拒绝的 AudioContext。 */
+const RETRY_COOLDOWN_MS = 1000;
+
 export class Sfx {
   /**
    * @param {{ tickUrl?: string, finishUrl?: string }} [options]
@@ -48,6 +51,8 @@ export class Sfx {
     this._unlocking = null;
     /** @type {number} 解码失败的次数：到上限后不再重试，免得每次抽签都报错 */
     this._failures = 0;
+    /** @type {number} 上次「没拿到手势」的时刻，用于冷却，避免每次都建 AudioContext */
+    this._retryAt = 0;
 
     /** @type {boolean} */
     this.enabled = true;
@@ -76,6 +81,7 @@ export class Sfx {
     if (this._unlocking) return this._unlocking;
     if (this._tickBuffer && this._finishBuffer) return;
     if (this._failures >= MAX_FAILURES) return;
+    if (performance.now() < this._retryAt) return;
     this._unlocking = (async () => {
       let ctx = null;
       try {
@@ -94,7 +100,9 @@ export class Sfx {
           ]);
         }
         if (ctx.state !== 'running') {
+          // --auto 的程序化点击会走到这里：不记失败，只冷却一下等真实手势
           this._ctx = null;
+          this._retryAt = performance.now() + RETRY_COOLDOWN_MS;
           void ctx.close().catch(() => {});
           return;
         }
