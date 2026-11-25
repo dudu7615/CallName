@@ -16,21 +16,28 @@ const BELOW = 5;    // 赢家下方假名数量，保证静止时下半格不露
 const MANUAL_PATTERN = 24;      // 一个周期的格数
 const MANUAL_REPEATS = 4;       // 周期重复份数，要覆盖停止时可能落到的下标
 const MANUAL_CELL_MS = 26;      // 匀速阶段每格耗时
+const MANUAL_TICK_EVERY = 3;    // 手动停模式每跨几格响一次（约 13 次/秒）
 
 /** @typedef {{ id: number, name: string, weight: number }} Winner */
+/** @typedef {{ onTick?: (() => void) | null, onFinish?: (() => void) | null }} ReelHooks */
 
 export class Reel {
   /**
    * @param {HTMLElement} clip  .clip 容器
    * @param {HTMLElement} strip .strip 条带
+   * @param {ReelHooks} [hooks] 音效回调；Reel 本身不认识音频，便于单测与替换
    */
-  constructor(clip, strip) {
+  constructor(clip, strip, { onTick = null, onFinish = null } = {}) {
     this.clip = clip;
     this.strip = strip;
     this.timer = null;
     /** @type {HTMLElement | null} */
     this.winnerEl = null;
     this.reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    /** @type {(() => void) | null} */
+    this._onTick = onTick;
+    /** @type {(() => void) | null} */
+    this._onFinish = onFinish;
 
     // 手动停模式的 rAF 循环状态
     /** @type {number} */
@@ -43,6 +50,23 @@ export class Reel {
     this._spinning = false;
     /** @type {string | null} 手动停模式下待揭晓的赢家名字 */
     this._pendingWinner = null;
+    /** 单调累加的位移（不取模），跨格计数只能用它 */
+    this._travel = 0;
+    /** 已经计过数的格数（与 _travel 配套） */
+    this._cellMark = 0;
+    /** 攒够 MANUAL_TICK_EVERY 格才响一次 */
+    this._tickAcc = 0;
+
+    // 自动模式的跨格探针：CSS transition 期间 JS 没有逐帧机会，
+    // 只能每帧读一次计算样式里的位移。strip.style.transform 在过渡中
+    // 返回的是目标值，不能用。
+    /** @type {number} */
+    this._probeRaf = 0;
+    /** @type {boolean} */
+    this._probing = false;
+    this._probeStartY = 0;
+    this._probeH = 0;
+    this._probeIndex = 0;
   }
 
   /** 用名字数组构建条带，winIndex 位置是赢家（先不加高亮，由 reveal() 揭开）。 */
@@ -69,6 +93,24 @@ export class Reel {
     window.setTimeout(() => {
       if (this.winnerEl) this.winnerEl.classList.remove('pop');
     }, 740);
+  }
+
+  /** @private 播结束音；音效失败也绝不能中断抽签流程。 */
+  _finishFx() {
+    try {
+      if (this._onFinish) this._onFinish();
+    } catch {
+      /* 音效是锦上添花，吞掉 */
+    }
+  }
+
+  /** @private 播一格 tick，同上。 */
+  _tickFx() {
+    try {
+      if (this._onTick) this._onTick();
+    } catch {
+      /* 同上 */
+    }
   }
 
   /** 静止时（无动画）把赢家格摆到高亮带中心。 */
@@ -101,6 +143,7 @@ export class Reel {
     if (this.reduced) {
       this.settle();
       this.reveal();
+      this._finishFx();
       return;
     }
 
@@ -120,6 +163,7 @@ export class Reel {
       const finish = () => {
         if (done) return;
         done = true;
+        this._stopProbe();
         this.strip.removeEventListener('transitionend', onEnd);
         window.clearTimeout(this.timer);
         resolve();
@@ -131,12 +175,14 @@ export class Reel {
       // 窗口被遮挡时 QtWebEngine 可能丢 transitionend
       this.timer = window.setTimeout(finish, duration + 400);
 
+      this._startProbe(startY, h);
       this.strip.style.transition = `transform ${duration}ms cubic-bezier(.08,.82,.06,1)`;
       this.strip.style.transform = `translate3d(0, ${restY}px, 0)`;
     });
 
     // 停稳之后才点亮赢家，滚动过程中不泄露结果
     this.reveal();
+    this._finishFx();
   }
 
   /** 下一次抽签前的“跳变”：换内容并瞬间归位，用户看不到中间静止帧。 */
@@ -175,6 +221,9 @@ export class Reel {
     this._pendingWinner = winner.name;
     this.winnerEl = null;
     this._offset = 0;
+    this._travel = 0;
+    this._cellMark = 0;
+    this._tickAcc = 0;
     this.strip.style.transition = 'none';
     this.strip.style.transform = 'translate3d(0, 0, 0)';
     void this.strip.offsetHeight;
@@ -226,7 +275,10 @@ export class Reel {
     if (this._pendingWinner !== null) cell.textContent = this._pendingWinner;
     this.winnerEl = cell;
     this._settleCell(cell);
+    // 落格是瞬时的，tick 停在这里就够了，最后报一个结束音
+    this._tickAcc = 0;
     this.reveal();
+    this._finishFx();
   }
 
   /** @private 匀速阶段：每帧推进 offset，取模换行（内容周期重复所以无缝）。 */
@@ -235,9 +287,27 @@ export class Reel {
     // 窗口被遮挡时浏览器会把 rAF 降到 1Hz，夹住 dt 防止一帧跳过好几格
     const dt = this._lastTs ? Math.min(ts - this._lastTs, 64) : 16;
     this._lastTs = ts;
-    this._offset = (this._offset + this._speed * dt) % this._periodPx;
+    const delta = this._speed * dt;
+    this._offset = (this._offset + delta) % this._periodPx;
+    // offset 会归零，跨格计数必须用不取模的 _travel
+    this._travel += delta;
     this.strip.style.transform = `translate3d(0, ${-this._offset}px, 0)`;
+    this._countTicks();
     this._raf = requestAnimationFrame((next) => this._tick(next));
+  }
+
+  /** @private 手动停模式：跨 MANUAL_TICK_EVERY 格响一次，避免 38 格/秒糊成噪声。 */
+  _countTicks() {
+    const h = this._cellH;
+    if (!h) return;
+    const crossed = Math.floor(this._travel / h) - this._cellMark;
+    if (crossed <= 0) return;
+    this._cellMark += crossed;
+    this._tickAcc += crossed;
+    while (this._tickAcc >= MANUAL_TICK_EVERY) {
+      this._tickAcc -= MANUAL_TICK_EVERY;
+      this._tickFx();
+    }
   }
 
   /** @private 把指定格瞬间摆到高亮带中心（不减高亮，交给 reveal）。 */
@@ -252,9 +322,55 @@ export class Reel {
   _cancelLoop() {
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
+    this._stopProbe();
     window.clearTimeout(this.timer);
     this.timer = null;
     this._spinning = false;
+  }
+
+  /**
+   * @private 启动自动模式的跨格探针。
+   * 读计算样式而不是 strip.style.transform：过渡中的内联样式是目标值，
+   * 一帧也读不出中间位置。
+   * @param {number} startY 起始位移
+   * @param {number} h 单格高度
+   */
+  _startProbe(startY, h) {
+    this._stopProbe();
+    if (h <= 0) return;
+    this._probeStartY = startY;
+    this._probeH = h;
+    this._probeIndex = 0;
+    this._probing = true;
+    this._probeRaf = requestAnimationFrame(() => this._probe());
+  }
+
+  /** @private 每帧比对已走过的格数；一帧跨多格也只响一记，交给 Sfx 节流。 */
+  _probe() {
+    if (!this._probing) return;
+    try {
+      // translate3d 在计算样式里可能被序列化成 matrix3d，用 DOMMatrix 统一取 m42
+      const matrix = new DOMMatrix(getComputedStyle(this.strip).transform);
+      const ty = matrix.m42;
+      if (Number.isFinite(ty)) {
+        // +1e-6 防止浮点误差把刚跨过的一格判成没跨过
+        const index = Math.floor((this._probeStartY - ty) / this._probeH + 1e-6);
+        if (index > this._probeIndex) {
+          this._probeIndex = index;
+          this._tickFx();
+        }
+      }
+    } catch {
+      // 计算样式读不出来就放弃这一帧，探针继续
+    }
+    this._probeRaf = requestAnimationFrame(() => this._probe());
+  }
+
+  /** @private */
+  _stopProbe() {
+    this._probing = false;
+    if (this._probeRaf) cancelAnimationFrame(this._probeRaf);
+    this._probeRaf = 0;
   }
 
   /** @private */

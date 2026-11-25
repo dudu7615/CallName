@@ -8,9 +8,11 @@
  *   open_manage() -> ApiResponse<LaunchResult>
  *   get_settings() -> ApiResponse<SettingsResult>
  *   set_draw_mode(mode) -> ApiResponse<SettingsResult>
+ *   set_sound_enabled(enabled) -> ApiResponse<SettingsResult>
  */
 
 import { Reel } from './reel.js';
+import { Sfx } from './sfx.js';
 
 const SPIN_MS = 3000;
 const POLL_MS = 1500;
@@ -32,14 +34,30 @@ const state = {
   starting: false,
 };
 
+const sfx = new Sfx();
+
+/** --auto 自测用：回调次数与真正发声次数分开计数。
+ *  两者之差就是 Sfx 的节流效果，无手势时前者有值、后者为 0。 */
+let tickTotal = 0;
+let finishTotal = 0;
+let tickPlayed = 0;
+let finishPlayed = 0;
+
 const reel = new Reel(
   /** @type {HTMLElement} */ (document.getElementById('clip')),
   /** @type {HTMLElement} */ (document.getElementById('strip')),
+  {
+    onTick: () => { tickTotal += 1; if (sfx.tick()) tickPlayed += 1; },
+    onFinish: () => { finishTotal += 1; if (sfx.finish()) finishPlayed += 1; },
+  },
 );
 
 const startBtn = /** @type {HTMLButtonElement} */ (document.getElementById('start'));
 const startLabel = /** @type {HTMLElement} */ (document.getElementById('start-label'));
 const modeBtn = /** @type {HTMLButtonElement} */ (document.getElementById('mode'));
+const soundBtn = /** @type {HTMLButtonElement} */ (document.getElementById('sound'));
+const soundOnIcon = /** @type {SVGElement} */ (document.getElementById('sound-on'));
+const soundOffIcon = /** @type {SVGElement} */ (document.getElementById('sound-off'));
 const resetBtn = /** @type {HTMLButtonElement} */ (document.getElementById('reset'));
 const manageBtn = /** @type {HTMLButtonElement} */ (document.getElementById('manage'));
 const hudCycle = /** @type {HTMLElement} */ (document.getElementById('hud-cycle'));
@@ -97,6 +115,17 @@ function syncButton() {
     || (empty && !(state.manual && state.spinning));
   resetBtn.disabled = state.busy || state.spinning || state.starting || empty;
   modeBtn.disabled = state.busy || state.spinning || state.starting;
+  syncSoundButton();
+}
+
+/** 音效按钮的图标与按下态；静音时换成带斜杠的喇叭。 */
+function syncSoundButton() {
+  const on = sfx.enabled;
+  soundBtn.setAttribute('aria-pressed', String(on));
+  soundBtn.title = on ? '音效：开（点击静音）' : '音效：关（点击开启）';
+  soundBtn.classList.toggle('is-off', !on);
+  soundOnIcon.style.display = on ? '' : 'none';
+  soundOffIcon.style.display = on ? 'none' : '';
 }
 
 /** 切换模式开关的视觉与状态；调用方负责持久化。 */
@@ -245,6 +274,8 @@ function showPendingAutoReset() {
 
 /** 主按钮（以及空格/回车）的唯一入口，按模式分流。 */
 async function doPrimary() {
+  // AudioContext 必须在用户手势的同步调用栈里解锁；等 await draw() 回来就晚了
+  void sfx.unlock();
   const action = nextAction();
   if (action === 'start') await startManual();
   else if (action === 'stop') await stopManual();
@@ -290,6 +321,19 @@ async function doToggleMode() {
   }
 }
 
+async function doToggleSound() {
+  const next = !sfx.enabled;
+  sfx.setEnabled(next);   // 乐观切换
+  syncSoundButton();
+  try {
+    await unwrap(window.pywebview.api.set_sound_enabled(next));
+  } catch (error) {
+    sfx.setEnabled(!next);
+    syncSoundButton();
+    showToast(`无法保存音效设置：${error instanceof Error ? error.message : String(error)}`, 4000, true);
+  }
+}
+
 async function doOpenManage() {
   try {
     await unwrap(window.pywebview.api.open_manage());
@@ -301,6 +345,7 @@ async function doOpenManage() {
 function bindEvents() {
   startBtn.addEventListener('click', () => { void doPrimary(); });
   modeBtn.addEventListener('click', () => { void doToggleMode(); });
+  soundBtn.addEventListener('click', () => { void doToggleSound(); });
   resetBtn.addEventListener('click', () => { void doReset(); });
   manageBtn.addEventListener('click', () => { void doOpenManage(); });
   document.addEventListener('keydown', (event) => {
@@ -325,6 +370,8 @@ async function boot() {
   try {
     const settings = await unwrap(window.pywebview.api.get_settings());
     applyMode(settings.draw_mode === 'manual');
+    sfx.setEnabled(settings.sound_enabled !== false);
+    syncSoundButton();
   } catch (error) {
     applyMode(false);
     showToast(`读取设置失败：${error instanceof Error ? error.message : String(error)}`, 4000, true);
@@ -341,6 +388,13 @@ window.clickStop = () => {
   manual: state.manual,
   starting: state.starting,
   spinning: state.spinning,
+  sound: sfx.enabled,
+  sound_ready: sfx.ready,
+  sound_error: sfx.failed,
+  ticks: tickTotal,
+  finishes: finishTotal,
+  ticks_played: tickPlayed,
+  finishes_played: finishPlayed,
   cycle: state.status ? state.status.cycle : null,
   remaining: state.status ? state.status.remaining : null,
   active: state.status ? state.status.active : null,
